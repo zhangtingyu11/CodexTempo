@@ -9,8 +9,10 @@
     <AssemblyName>CodexTempo</AssemblyName>
     <RootNamespace>CodexTempo</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\CodexTempo.ico</ApplicationIcon>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <DebugType Condition="'$(Configuration)' == 'Release'">none</DebugType>
-    <Version>1.0.3</Version>
+    <Version>1.0.4</Version>
     <Product>Codex Tempo</Product>
     <Description>A quiet Windows widget for pacing Codex usage limits.</Description>
     <Authors>Codex Tempo contributors</Authors>

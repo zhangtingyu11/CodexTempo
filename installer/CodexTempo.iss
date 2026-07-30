@@ -1,6 +1,6 @@
 #define MyAppName "Codex Tempo"
 #ifndef MyAppVersion
-  #define MyAppVersion "1.0.3"
+  #define MyAppVersion "1.0.4"
 #endif
 #define MyAppPublisher "Grapymage"
 #define MyAppURL "https://github.com/zhangtingyu11/CodexTempo"
@@ -23,6 +23,7 @@ OutputBaseFilename=CodexTempo-Setup-x64
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
+SetupIconFile=..\CodexTempo\Assets\CodexTempo.ico
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 UninstallDisplayIcon={app}\{#MyAppExeName}
@@ -39,11 +40,11 @@ VersionInfoProductVersion={#MyAppVersion}
 Name: "startup"; Description: "Start automatically after signing in to Windows"; GroupDescription: "Additional options:"; Flags: unchecked
 
 [Files]
-Source: "..\artifacts\win-x64\CodexTempo.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\artifacts\win-x64\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
+Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"
 
 [Registry]
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "CodexTempo"; ValueData: """{app}\{#MyAppExeName}"""; Flags: uninsdeletevalue; Tasks: startup

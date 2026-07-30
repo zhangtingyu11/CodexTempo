@@ -32,7 +32,7 @@ jobs:
           -o .\artifacts\${{ matrix.runtime }}
       - name: Package
         shell: pwsh
-        run: Compress-Archive -Path ".\artifacts\${{ matrix.runtime }}\CodexTempo.exe" -DestinationPath ".\CodexTempo-${{ matrix.runtime }}.zip"
+        run: Compress-Archive -Path ".\artifacts\${{ matrix.runtime }}\*" -DestinationPath ".\CodexTempo-${{ matrix.runtime }}.zip"
       - name: Build installer
         if: matrix.runtime == 'win-x64'
         shell: pwsh
