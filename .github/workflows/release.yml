@@ -12,6 +12,7 @@ permissions:
 jobs:
   windows:
     strategy:
+      fail-fast: false
       matrix:
         runtime: [win-x64, win-arm64]
     runs-on: windows-latest
