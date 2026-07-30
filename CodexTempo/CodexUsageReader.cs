@@ -260,6 +260,17 @@ public sealed class CodexUsageReader : IDisposable
                 return null;
             if (limits.ValueKind != JsonValueKind.Object) return null;
 
+            // Codex can emit separate metered buckets for specific models.
+            // Only the canonical "codex" bucket represents the general
+            // 5-hour/weekly allowance shown by this widget.
+            if (limits.TryGetProperty("limit_id", out var limitIdElement))
+            {
+                var limitId = limitIdElement.GetString();
+                if (!string.IsNullOrWhiteSpace(limitId) &&
+                    !limitId.Equals("codex", StringComparison.OrdinalIgnoreCase))
+                    return null;
+            }
+
             LimitWindow? five = null;
             LimitWindow? week = null;
             foreach (var name in new[] { "primary", "secondary" })
@@ -283,6 +294,25 @@ public sealed class CodexUsageReader : IDisposable
             return new UsageSnapshot(five, week, captured, path);
         }
         catch (JsonException) { return null; }
+    }
+
+    public static bool RunSelfTest()
+    {
+        const string canonical = """
+            {"timestamp":"2026-07-30T14:40:28Z","payload":{"rate_limits":{
+              "limit_id":"codex","primary":{"used_percent":31,"window_minutes":10080,"resets_at":1785903281}
+            }}}
+            """;
+        const string modelSpecific = """
+            {"timestamp":"2026-07-30T14:40:38Z","payload":{"rate_limits":{
+              "limit_id":"codex_bengalfox","limit_name":"GPT-5.3-Codex-Spark",
+              "primary":{"used_percent":0,"window_minutes":10080,"resets_at":1786027234}
+            }}}
+            """;
+
+        var accepted = ParseLine(canonical, "canonical.jsonl");
+        var rejected = ParseLine(modelSpecific, "model-specific.jsonl");
+        return accepted?.Week?.UsedPercent == 31 && rejected is null;
     }
 
     public void Dispose() => _watcher?.Dispose();

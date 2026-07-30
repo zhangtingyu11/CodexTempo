@@ -12,7 +12,9 @@ public partial class App : System.Windows.Application
         if (e.Args.Contains("--self-test", StringComparer.OrdinalIgnoreCase))
         {
             Environment.Exit(
-                RecommendationEngine.RunSelfTest() && CodexTempo.MainWindow.RunDockingSelfTest()
+                RecommendationEngine.RunSelfTest() &&
+                CodexUsageReader.RunSelfTest() &&
+                CodexTempo.MainWindow.RunDockingSelfTest()
                     ? 0
                     : 1);
             return;
