@@ -3,6 +3,7 @@
 .vs/
 .idea/
 release/
+artifacts/
 *.user
 *.suo
 CodexTempo-*.png

@@ -49,6 +49,10 @@ Codex Tempo 每 10 秒读取一次本机最新的额度快照，用 5 小时窗�
 dotnet run --project .\CodexTempo\CodexTempo.csproj
 ```
 
+这一节只适用于准备修改源码的开发者。普通用户不需要安装 .NET，也不需要运行任何命令：
+从 [Releases](https://github.com/zhangtingyu11/CodexTempo/releases) 下载
+`CodexTempo-Setup-x64.exe`，双击安装即可。安装器会创建开始菜单和桌面快捷方式，并支持正常卸载。
+
 ## 构建单文件版
 
 框架依赖版：
@@ -79,12 +83,12 @@ dotnet publish .\CodexTempo\CodexTempo.csproj -c Release -r win-x64 `
 
 仓库内置 GitHub Actions。推送 `v*` 标签后会自动构建并发布：
 
+- `CodexTempo-Setup-x64.exe`（推荐普通用户下载）
 - `CodexTempo-win-x64.zip`
 - `CodexTempo-win-arm64.zip`
 
-两个版本均为 self-contained，使用者无需另外安装 .NET。
-
-下载对应架构的 ZIP，解压后运行 `CodexTempo.exe` 即可。程序目前未进行商业代码签名，
+所有版本均为 self-contained，使用者无需另外安装 .NET。x64 安装包适用于绝大多数 Intel/AMD Windows 电脑；
+ZIP 是为需要免安装运行或 ARM64 设备的用户保留的便携版。程序目前未进行商业代码签名，
 Windows SmartScreen 可能在首次启动时显示“未知发布者”提示。
 
 ## 资源与隐私
