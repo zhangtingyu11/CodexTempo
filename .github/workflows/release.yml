@@ -1,0 +1,42 @@
+name: build
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    strategy:
+      matrix:
+        runtime: [win-x64, win-arm64]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Publish
+        run: >
+          dotnet publish .\CodexTempo\CodexTempo.csproj
+          -c Release
+          -r ${{ matrix.runtime }}
+          --self-contained true
+          -p:PublishSingleFile=true
+          -p:PublishReadyToRun=false
+          -o .\artifacts\${{ matrix.runtime }}
+      - name: Package
+        shell: pwsh
+        run: Compress-Archive -Path ".\artifacts\${{ matrix.runtime }}\CodexTempo.exe" -DestinationPath ".\CodexTempo-${{ matrix.runtime }}.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CodexTempo-${{ matrix.runtime }}
+          path: CodexTempo-${{ matrix.runtime }}.zip
+      - uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: CodexTempo-${{ matrix.runtime }}.zip

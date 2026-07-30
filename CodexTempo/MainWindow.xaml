@@ -1,0 +1,222 @@
+<Window x:Class="CodexTempo.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Codex Tempo" Width="372" Height="278"
+        MinWidth="144" MinHeight="56"
+        WindowStyle="None" AllowsTransparency="True"
+        Background="Transparent" ResizeMode="NoResize"
+        ShowInTaskbar="True" Topmost="True"
+        FontFamily="{StaticResource UiFont}"
+        SnapsToDevicePixels="True"
+        PreviewMouseLeftButtonDown="Window_PreviewMouseLeftButtonDown"
+        MouseDoubleClick="Window_MouseDoubleClick">
+  <Window.Resources>
+    <Color x:Key="InkColor">#24312A</Color>
+    <SolidColorBrush x:Key="Ink" Color="{StaticResource InkColor}"/>
+    <SolidColorBrush x:Key="Muted" Color="#778078"/>
+    <SolidColorBrush x:Key="Hairline" Color="#1B24312A"/>
+    <SolidColorBrush x:Key="Moss" Color="#607A66"/>
+    <SolidColorBrush x:Key="Track" Color="#E7E8E1"/>
+    <DropShadowEffect x:Key="SoftShadow" BlurRadius="26" ShadowDepth="7" Opacity=".18" Color="#23372C"/>
+
+    <Style x:Key="ChromeButton" TargetType="Button">
+      <Setter Property="Width" Value="25"/>
+      <Setter Property="Height" Value="25"/>
+      <Setter Property="Margin" Value="3,0,0,0"/>
+      <Setter Property="Foreground" Value="#68726A"/>
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="FontFamily" Value="Segoe Fluent Icons"/>
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="Shell" Background="{TemplateBinding Background}" CornerRadius="12">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="Shell" Property="Background" Value="#1224312A"/>
+              </Trigger>
+              <Trigger Property="IsPressed" Value="True">
+                <Setter TargetName="Shell" Property="Background" Value="#2424312A"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <Style x:Key="ThinProgress" TargetType="ProgressBar">
+      <Setter Property="Height" Value="6"/>
+      <Setter Property="Background" Value="{StaticResource Track}"/>
+      <Setter Property="Foreground" Value="{StaticResource Moss}"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ProgressBar">
+            <Grid>
+              <Border Background="{TemplateBinding Background}" CornerRadius="3"/>
+              <Grid x:Name="PART_Track" ClipToBounds="True">
+                <Border x:Name="PART_Indicator"
+                        HorizontalAlignment="Left"
+                        Background="{TemplateBinding Foreground}"
+                        CornerRadius="3"/>
+              </Grid>
+            </Grid>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+  </Window.Resources>
+
+  <Border x:Name="WidgetShell" Margin="16" CornerRadius="22" Background="#F8F7F2" Effect="{StaticResource SoftShadow}"
+          BorderBrush="#90FFFFFF" BorderThickness="1">
+    <Grid>
+      <Grid.Background>
+        <RadialGradientBrush Center=".08,.05" GradientOrigin=".08,.05" RadiusX=".9" RadiusY=".85">
+          <GradientStop Color="#FFFFFCF4" Offset="0"/>
+          <GradientStop Color="#FFF6F5EF" Offset="1"/>
+        </RadialGradientBrush>
+      </Grid.Background>
+      <Grid.RowDefinitions>
+        <RowDefinition x:Name="HeaderRow" Height="50"/>
+        <RowDefinition x:Name="AdviceRow" Height="70"/>
+        <RowDefinition x:Name="LimitsRow" Height="68"/>
+        <RowDefinition x:Name="FooterRow" Height="*"/>
+      </Grid.RowDefinitions>
+
+      <!-- A quiet leaf mark makes the utility recognizable without taking space. -->
+      <Grid Grid.Row="0" Margin="17,9,10,0" Background="Transparent">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*"/>
+          <ColumnDefinition Width="Auto"/>
+        </Grid.ColumnDefinitions>
+        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+          <Grid Width="23" Height="23" Margin="0,0,9,0">
+            <Ellipse Width="17" Height="20" Fill="#DCE5D9" RenderTransformOrigin=".5,.5">
+              <Ellipse.RenderTransform><RotateTransform Angle="32"/></Ellipse.RenderTransform>
+            </Ellipse>
+            <Path Data="M5,17 C9,13 12,9 17,5" Stroke="#647966" StrokeThickness="1.4"
+                  StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+          </Grid>
+          <StackPanel>
+            <TextBlock Text="C O D E X   T E M P O" FontFamily="Bahnschrift" FontWeight="SemiBold"
+                       FontSize="10.5" Foreground="{StaticResource Ink}"/>
+            <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+              <Ellipse x:Name="StatusDot" Width="5" Height="5" Fill="#72A477" Margin="0,0,5,0"/>
+              <TextBlock x:Name="SyncLabel" Text="正在读取本地额度…" FontSize="9.5" Foreground="{StaticResource Muted}"/>
+            </StackPanel>
+          </StackPanel>
+        </StackPanel>
+        <StackPanel Grid.Column="1" Orientation="Horizontal">
+          <Button x:Name="PinButton" Style="{StaticResource ChromeButton}" Content="&#xE840;"
+                  Foreground="#58705D" ToolTip="已置顶，点击取消" Click="PinButton_Click"/>
+          <Button Style="{StaticResource ChromeButton}" Content="&#xE921;"
+                  ToolTip="收起到屏幕边缘" Click="MinimizeButton_Click"/>
+          <Button Style="{StaticResource ChromeButton}" Content="&#xE8BB;"
+                  ToolTip="退出" Click="CloseButton_Click"/>
+        </StackPanel>
+      </Grid>
+
+      <Grid Grid.Row="1" Margin="20,2,20,0">
+        <Grid.RowDefinitions>
+          <RowDefinition Height="Auto"/>
+          <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*"/>
+          <ColumnDefinition Width="Auto"/>
+        </Grid.ColumnDefinitions>
+        <TextBlock x:Name="AdviceTitle" Text="寻找使用节奏…" FontSize="20" FontWeight="SemiBold"
+                   Foreground="{StaticResource Ink}" VerticalAlignment="Center"/>
+        <Border Grid.Column="1" x:Name="RatePill" CornerRadius="13" Background="#E4E9DF"
+                Padding="10,5" VerticalAlignment="Center" Margin="12,0,0,0">
+          <TextBlock x:Name="RateLabel" Text="—" FontFamily="Bahnschrift" FontSize="11"
+                     FontWeight="SemiBold" Foreground="#526756"/>
+        </Border>
+        <TextBlock Grid.Row="1" Grid.ColumnSpan="2"
+                   x:Name="AdviceDetail" Text="首次读取可能需要几秒" FontSize="10"
+                   Foreground="{StaticResource Muted}" Margin="0,3,0,0"
+                   TextWrapping="Wrap" TextTrimming="None" LineHeight="15"
+                   VerticalAlignment="Top"/>
+      </Grid>
+
+      <Grid x:Name="LimitsPanel" Grid.Row="2" Margin="20,5,20,0">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*"/>
+          <ColumnDefinition Width="18"/>
+          <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <StackPanel x:Name="FiveLimitStack">
+          <Grid x:Name="FiveLimitHeader" Margin="0,0,0,8">
+            <TextBlock Text="5 小时" FontSize="10.5" Foreground="{StaticResource Muted}"/>
+            <TextBlock x:Name="FivePercent" Text="--%" HorizontalAlignment="Right"
+                       FontFamily="Bahnschrift" FontWeight="SemiBold" FontSize="16" Foreground="{StaticResource Ink}"/>
+          </Grid>
+          <ProgressBar x:Name="FiveProgress" Style="{StaticResource ThinProgress}" Maximum="100" Value="0"/>
+          <TextBlock x:Name="FiveReset" Text="等待数据" FontSize="9.5" Foreground="{StaticResource Muted}" Margin="0,7,0,0"/>
+        </StackPanel>
+
+        <Border Grid.Column="1" Width="1" Background="{StaticResource Hairline}" Margin="8,0"/>
+
+        <StackPanel x:Name="WeekLimitStack" Grid.Column="2">
+          <Grid x:Name="WeekLimitHeader" Margin="0,0,0,8">
+            <TextBlock Text="本周" FontSize="10.5" Foreground="{StaticResource Muted}"/>
+            <TextBlock x:Name="WeekPercent" Text="--%" HorizontalAlignment="Right"
+                       FontFamily="Bahnschrift" FontWeight="SemiBold" FontSize="16" Foreground="{StaticResource Ink}"/>
+          </Grid>
+          <ProgressBar x:Name="WeekProgress" Style="{StaticResource ThinProgress}" Maximum="100" Value="0"/>
+          <TextBlock x:Name="WeekReset" Text="等待数据" FontSize="9.5" Foreground="{StaticResource Muted}" Margin="0,7,0,0"/>
+        </StackPanel>
+      </Grid>
+
+      <Grid x:Name="VerticalLimitsPanel" Grid.Row="2"
+            Margin="10,5,10,4" Visibility="Collapsed">
+        <Grid.RowDefinitions>
+          <RowDefinition Height="*"/>
+          <RowDefinition Height="5"/>
+          <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel VerticalAlignment="Center">
+          <Grid Margin="0,0,0,2">
+            <TextBlock Text="5 小时" FontSize="10.5" Foreground="{StaticResource Muted}"/>
+            <TextBlock Text="{Binding Text, ElementName=FivePercent}" HorizontalAlignment="Right"
+                       FontFamily="Bahnschrift" FontWeight="SemiBold" FontSize="16"
+                       Foreground="{StaticResource Ink}"/>
+          </Grid>
+          <TextBlock Text="{Binding Text, ElementName=FiveReset}" FontSize="9.5"
+                     Foreground="{StaticResource Muted}" Margin="0"
+                     TextTrimming="CharacterEllipsis"/>
+        </StackPanel>
+
+        <Border Grid.Row="1" Height="1" Background="{StaticResource Hairline}"
+                VerticalAlignment="Center"/>
+
+        <StackPanel Grid.Row="2" VerticalAlignment="Center">
+          <Grid Margin="0,0,0,2">
+            <TextBlock Text="本周" FontSize="10.5" Foreground="{StaticResource Muted}"/>
+            <TextBlock Text="{Binding Text, ElementName=WeekPercent}" HorizontalAlignment="Right"
+                       FontFamily="Bahnschrift" FontWeight="SemiBold" FontSize="16"
+                       Foreground="{StaticResource Ink}"/>
+          </Grid>
+          <TextBlock Text="{Binding Text, ElementName=WeekReset}" FontSize="9.5"
+                     Foreground="{StaticResource Muted}" Margin="0"
+                     TextTrimming="CharacterEllipsis"/>
+        </StackPanel>
+      </Grid>
+
+      <Grid Grid.Row="3" Margin="20,4,20,13">
+        <Border Height="1" Background="{StaticResource Hairline}" VerticalAlignment="Top"/>
+        <TextBlock x:Name="FooterLabel" Text="每 10 秒自动刷新"
+                   VerticalAlignment="Bottom" HorizontalAlignment="Left"
+                   FontSize="9" Foreground="#8E958F"/>
+        <TextBlock Text="拖动空白处移动" VerticalAlignment="Bottom" HorizontalAlignment="Right"
+                   FontSize="9" Foreground="#A0A6A0"/>
+      </Grid>
+    </Grid>
+  </Border>
+</Window>
