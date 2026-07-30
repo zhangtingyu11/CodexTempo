@@ -116,7 +116,7 @@
           <Button Style="{StaticResource ChromeButton}" Content="&#xE921;"
                   ToolTip="收起到屏幕边缘" Click="MinimizeButton_Click"/>
           <Button Style="{StaticResource ChromeButton}" Content="&#xE8BB;"
-                  ToolTip="退出" Click="CloseButton_Click"/>
+                  ToolTip="隐藏或退出" Click="CloseButton_Click"/>
         </StackPanel>
       </Grid>
 

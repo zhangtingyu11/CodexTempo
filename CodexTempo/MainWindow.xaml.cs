@@ -19,6 +19,8 @@ public partial class MainWindow : Window
     private bool _refreshing;
     private bool _isPinned = true;
     private bool _isDocked;
+    private bool _allowClose;
+    private bool _closePromptOpen;
     private DockEdge _dockEdge;
     private readonly Forms.NotifyIcon _trayIcon;
     private const double FullWidth = 372;
@@ -266,7 +268,7 @@ public partial class MainWindow : Window
         menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add("退出", null, (_, _) =>
         {
-            Close();
+            RequestExit();
         });
 
         var icon = new Forms.NotifyIcon
@@ -315,6 +317,7 @@ public partial class MainWindow : Window
     {
         if (_isDocked)
             ExpandFromDock();
+        ShowInTaskbar = true;
         Show();
         WindowState = WindowState.Normal;
         Activate();
@@ -344,7 +347,49 @@ public partial class MainWindow : Window
     }
 
     private void CloseButton_Click(object sender, RoutedEventArgs e)
-        => Close();
+        => PromptForCloseChoice();
+
+    private void PromptForCloseChoice()
+    {
+        if (_closePromptOpen) return;
+
+        _closePromptOpen = true;
+        try
+        {
+            var dialog = new CloseChoiceDialog
+            {
+                Owner = this,
+                Topmost = _isPinned
+            };
+            dialog.ShowDialog();
+
+            switch (dialog.Choice)
+            {
+                case CloseChoice.HideToTray:
+                    HideToTray();
+                    break;
+                case CloseChoice.Exit:
+                    RequestExit();
+                    break;
+            }
+        }
+        finally
+        {
+            _closePromptOpen = false;
+        }
+    }
+
+    private void HideToTray()
+    {
+        ShowInTaskbar = false;
+        Hide();
+    }
+
+    private void RequestExit()
+    {
+        _allowClose = true;
+        Close();
+    }
 
     private void RestorePosition()
     {
@@ -569,6 +614,13 @@ public partial class MainWindow : Window
 
     private void OnClosing(object? sender, CancelEventArgs e)
     {
+        if (!_allowClose)
+        {
+            e.Cancel = true;
+            Dispatcher.BeginInvoke((Action)PromptForCloseChoice);
+            return;
+        }
+
         _timer.Stop();
         _reader.Dispose();
         _trayIcon.Visible = false;

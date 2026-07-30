@@ -1,6 +1,6 @@
 #define MyAppName "Codex Tempo"
 #ifndef MyAppVersion
-  #define MyAppVersion "1.0.2"
+  #define MyAppVersion "1.0.3"
 #endif
 #define MyAppPublisher "Grapymage"
 #define MyAppURL "https://github.com/zhangtingyu11/CodexTempo"
@@ -36,7 +36,6 @@ VersionInfoProductName={#MyAppName}
 VersionInfoProductVersion={#MyAppVersion}
 
 [Tasks]
-Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional options:"; Flags: checkedonce
 Name: "startup"; Description: "Start automatically after signing in to Windows"; GroupDescription: "Additional options:"; Flags: unchecked
 
 [Files]
@@ -44,7 +43,7 @@ Source: "..\artifacts\win-x64\CodexTempo.exe"; DestDir: "{app}"; Flags: ignoreve
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 
 [Registry]
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "CodexTempo"; ValueData: """{app}\{#MyAppExeName}"""; Flags: uninsdeletevalue; Tasks: startup

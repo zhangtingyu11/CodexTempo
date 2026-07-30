@@ -18,7 +18,8 @@
 - 今日建议用量与使用节奏提醒
 - 每 10 秒自动刷新
 - 触碰屏幕边缘自动缩成紧凑模式
-- 窗口置顶、托盘入口与开机启动选项
+- 窗口置顶、托盘入口、桌面快捷方式与开机启动选项
+- 关闭时可选择隐藏到托盘或彻底退出
 - 只读取本地 Codex session，不联网、不上传数据
 
 ## 支持
@@ -47,7 +48,8 @@ Just run the installer—no configuration or separate .NET installation is requi
 - Suggested daily usage and pacing guidance
 - Automatic refresh every 10 seconds
 - Compact mode when touching a screen edge
-- Always-on-top, system tray access, and optional startup
+- Always-on-top, system tray access, desktop shortcut, and optional startup
+- Choose between hiding to the tray and exiting when closing
 - Local-only session reading with no network requests or data uploads
 
 MIT License
