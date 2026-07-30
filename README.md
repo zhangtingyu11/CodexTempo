@@ -1,105 +1,53 @@
 # Codex Tempo
 
-一个轻量、无网络请求的 Windows Codex 额度桌面小组件。项目不包含个人路径或账号信息，
-可以直接 fork、构建和分发。
+一个轻量、安静的 Windows Codex 额度桌面小组件。
 
-Codex Tempo 每 10 秒读取一次本机最新的额度快照，用 5 小时窗口保护短期用量，
-用一周窗口规划长期节奏。界面显示的百分比均为**剩余额度**。
+它每 10 秒读取一次本地额度快照，同时展示 5 小时与每周剩余额度，并根据本周进度告诉你今天用到多少比较合适。
 
-## 节奏建议是什么意思？
+![Codex Tempo 界面](assets/app-preview.png)
 
-周节奏以“剩余额度 ÷ 距离重置的时间”计算：
+## 下载
 
-- `1.0× 周均速`：从现在开始均匀使用，刚好在本周额度重置前用完。
-- `1.4× 周均速`：建议速度约为均匀速度的 1.4 倍，当前可以多用一些。
-- `0.7× 周均速`：建议降到均匀速度的约 70%，避免太早耗尽。
-- 5 小时额度较低时，会自动压低建议，避免为了追周进度而提前撞限额。
+[下载最新版 Windows 安装包](https://github.com/zhangtingyu11/CodexTempo/releases/latest/download/CodexTempo-Setup-x64.exe)
 
-这里的倍数是**额度消耗速度**，不是精确的消息条数。不同模型、上下文长度和任务复杂度
-消耗不同，因此小组件不会虚构“每小时可发多少条”。
-
-建议行同时显示：
-
-- 今天估计已经使用的额度。
-- 今天的目标额度以及还可以使用多少。
-- 本周累计已用额度。
-
-今日已用量优先使用昨天最后一条额度快照与当前快照的差值估算；没有昨天快照时，
-使用今天第一条快照作为基线。它不是官方逐日账单。
+双击安装即可，无需配置，也无需额外安装 .NET。程序未进行商业代码签名，Windows 首次运行时可能显示“未知发布者”。
 
 ## 功能
 
-- 10 秒自动刷新与文件变更监听。
-- 窗口任意非按钮区域均可拖动。
-- 可切换置顶，按钮颜色和图标会显示当前状态。
-- 碰到当前显示器边缘即自动吸附：左右显示竖向额度条，上下显示横向额度条。
-- `—` 按钮收起到最近的屏幕边缘；双击紧凑额度条或将其拖离边缘即可恢复。
-- 同时保留任务栏与托盘入口，避免窗口无法找回。
-- `×` 按钮彻底退出，不留下隐藏进程；再次启动会创建全新窗口。
-- 不限制单实例：每次双击 EXE 都会明确打开一个新窗口，不会静默退出。
-- 无网络请求，不读取 `auth.json`。
-- 过期的 5 小时或周窗口不会作为当前数据展示。
-- 支持 x64 与 ARM64 Windows。
+- 5 小时与每周额度实时显示
+- 今日建议用量与使用节奏提醒
+- 每 10 秒自动刷新
+- 触碰屏幕边缘自动缩成紧凑模式
+- 窗口置顶、托盘入口与开机启动选项
+- 只读取本地 Codex session，不联网、不上传数据
 
-## 本地运行
+## 支持
 
-需要 [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)：
+如果 Codex Tempo 对你有帮助，可以请我喝杯咖啡 ☕
 
-```powershell
-dotnet run --project .\CodexTempo\CodexTempo.csproj
-```
+<img src="assets/alipay-support.jpg" width="280" alt="支付宝支持二维码">
 
-这一节只适用于准备修改源码的开发者。普通用户不需要安装 .NET，也不需要运行任何命令：
-从 [Releases](https://github.com/zhangtingyu11/CodexTempo/releases) 下载
-`CodexTempo-Setup-x64.exe`，双击安装即可。安装器会创建开始菜单和桌面快捷方式，并支持正常卸载。
+---
 
-## 构建单文件版
+## English
 
-框架依赖版：
+Codex Tempo is a lightweight Windows desktop widget for keeping an eye on your Codex usage limits.
 
-```powershell
-dotnet publish .\CodexTempo\CodexTempo.csproj -c Release -r win-x64 `
-  --self-contained false -p:PublishSingleFile=true -o .\release
-```
+It refreshes every 10 seconds, shows the remaining 5-hour and weekly allowance, and suggests a comfortable daily pace so the weekly allowance lasts until reset.
 
-无需预装 .NET 的独立版：
+### Download
 
-```powershell
-dotnet publish .\CodexTempo\CodexTempo.csproj -c Release -r win-x64 `
-  --self-contained true -p:PublishSingleFile=true -o .\release
-```
+[Download the latest Windows installer](https://github.com/zhangtingyu11/CodexTempo/releases/latest/download/CodexTempo-Setup-x64.exe)
 
-## 数据位置
+Just run the installer—no configuration or separate .NET installation is required. The app is not commercially code-signed yet, so Windows may show an “Unknown publisher” warning on first launch.
 
-默认读取：
+### Features
 
-```text
-%USERPROFILE%\.codex\sessions
-```
+- Live 5-hour and weekly allowance
+- Suggested daily usage and pacing guidance
+- Automatic refresh every 10 seconds
+- Compact mode when touching a screen edge
+- Always-on-top, system tray access, and optional startup
+- Local-only session reading with no network requests or data uploads
 
-如设置了 `CODEX_HOME`，则读取 `%CODEX_HOME%\sessions`，适合自定义安装路径。
-
-## GitHub 发布
-
-仓库内置 GitHub Actions。推送 `v*` 标签后会自动构建并发布：
-
-- `CodexTempo-Setup-x64.exe`（推荐普通用户下载）
-- `CodexTempo-win-x64.zip`
-- `CodexTempo-win-arm64.zip`
-
-所有版本均为 self-contained，使用者无需另外安装 .NET。x64 安装包适用于绝大多数 Intel/AMD Windows 电脑；
-ZIP 是为需要免安装运行或 ARM64 设备的用户保留的便携版。程序目前未进行商业代码签名，
-Windows SmartScreen 可能在首次启动时显示“未知发布者”提示。
-
-## 资源与隐私
-
-- WPF 原生窗口，不嵌入 Chromium。
-- 文件监听器跟踪最新 session；文件未变化时直接使用内存缓存，变化后只读取增量数据。
-- 关闭窗口即退出，不留下后台服务。
-- 只读扫描 session JSONL 中的额度快照；不读取 `auth.json`，不访问网络，也不上传数据。
-- 不包含硬编码用户名、个人目录、账号或令牌；每位用户运行时动态解析自己的 `%USERPROFILE%`
-  或 `CODEX_HOME`。
-
-## License
-
-[MIT](LICENSE)
+MIT License
