@@ -5,7 +5,7 @@
         MinWidth="144" MinHeight="56"
         WindowStyle="None" AllowsTransparency="True"
         Background="Transparent" ResizeMode="NoResize"
-        ShowInTaskbar="True" Topmost="True"
+        ShowInTaskbar="False" Topmost="True"
         FontFamily="{StaticResource UiFont}"
         SnapsToDevicePixels="True"
         PreviewMouseLeftButtonDown="Window_PreviewMouseLeftButtonDown"

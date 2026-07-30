@@ -317,7 +317,6 @@ public partial class MainWindow : Window
     {
         if (_isDocked)
             ExpandFromDock();
-        ShowInTaskbar = true;
         Show();
         WindowState = WindowState.Normal;
         Activate();
@@ -381,7 +380,6 @@ public partial class MainWindow : Window
 
     private void HideToTray()
     {
-        ShowInTaskbar = false;
         Hide();
     }
 
