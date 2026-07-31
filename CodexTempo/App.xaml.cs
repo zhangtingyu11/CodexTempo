@@ -10,6 +10,35 @@ public partial class App : System.Windows.Application
 {
     protected override void OnStartup(StartupEventArgs e)
     {
+        var monitorIndex = Array.FindIndex(e.Args, x =>
+            x.Equals("--monitor-usage", StringComparison.OrdinalIgnoreCase));
+        if (monitorIndex >= 0 && monitorIndex + 1 < e.Args.Length)
+        {
+            try
+            {
+                var snapshots = Task.Run(async () =>
+                {
+                    using var reader = new CodexUsageProvider();
+                    var values = new List<UsageSnapshot?>();
+                    for (var i = 0; i < 3; i++)
+                    {
+                        values.Add(await reader.ReadLatestAsync());
+                        if (i < 2) await Task.Delay(TimeSpan.FromSeconds(10));
+                    }
+                    return values;
+                }).GetAwaiter().GetResult();
+                File.WriteAllText(e.Args[monitorIndex + 1],
+                    JsonSerializer.Serialize(snapshots, new JsonSerializerOptions { WriteIndented = true }));
+                Environment.Exit(snapshots.All(x => x is not null) ? 0 : 1);
+            }
+            catch (Exception ex)
+            {
+                File.WriteAllText(e.Args[monitorIndex + 1] + ".error.txt", ex.ToString());
+                Environment.Exit(1);
+            }
+            return;
+        }
+
         if (e.Args.Contains("--reader-refresh-test", StringComparer.OrdinalIgnoreCase))
         {
             Environment.Exit(CodexUsageReader.RunRefreshSelfTestCode());
@@ -22,7 +51,7 @@ public partial class App : System.Windows.Application
         {
             try
             {
-                using var reader = new CodexUsageReader();
+                using var reader = new CodexUsageProvider();
                 var snapshot = Task.Run(() => reader.ReadLatestAsync()).GetAwaiter().GetResult();
                 File.WriteAllText(e.Args[dumpIndex + 1],
                     JsonSerializer.Serialize(snapshot, new JsonSerializerOptions { WriteIndented = true }));
@@ -40,6 +69,7 @@ public partial class App : System.Windows.Application
         {
             Environment.Exit(
                 RecommendationEngine.RunSelfTest() &&
+                CodexAppServerClient.RunSelfTest() &&
                 CodexUsageReader.RunSelfTest() &&
                 CodexTempo.MainWindow.RunDockingSelfTest()
                     ? 0

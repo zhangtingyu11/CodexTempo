@@ -2,7 +2,7 @@
 
 一个轻量、安静的 Windows Codex 额度桌面小组件。
 
-它每 10 秒读取一次本地额度快照，同时展示 5 小时与每周剩余额度，并根据本周进度告诉你今天用到多少比较合适。
+它每 10 秒通过本机 Codex App Server 查询一次当前额度，同时展示 5 小时与每周剩余额度，并根据本周进度告诉你今天用到多少比较合适。
 
 ![Codex Tempo 界面](assets/app-preview.png)
 
@@ -16,11 +16,12 @@
 
 - 5 小时与每周额度实时显示
 - 今日建议用量与使用节奏提醒
-- 每 10 秒自动刷新
+- 每 10 秒通过 Codex 官方本地接口查询实时额度
 - 触碰屏幕边缘自动缩成紧凑模式
 - 窗口置顶、托盘入口、桌面快捷方式与开机启动选项，不占用任务栏
 - 关闭时可选择隐藏到托盘或彻底退出
-- 只读取本地 Codex session，不联网、不上传数据
+- 官方接口不可用时自动回退本地 session
+- 小组件不解析对话正文，也不向开发者服务器上传数据
 
 ## 支持
 
@@ -34,7 +35,7 @@
 
 Codex Tempo is a lightweight Windows desktop widget for keeping an eye on your Codex usage limits.
 
-It refreshes every 10 seconds, shows the remaining 5-hour and weekly allowance, and suggests a comfortable daily pace so the weekly allowance lasts until reset.
+It queries the local Codex App Server every 10 seconds, shows the remaining 5-hour and weekly allowance, and suggests a comfortable daily pace so the weekly allowance lasts until reset.
 
 ### Download
 
@@ -46,10 +47,11 @@ Just run the installer—no configuration or separate .NET installation is requi
 
 - Live 5-hour and weekly allowance
 - Suggested daily usage and pacing guidance
-- Automatic refresh every 10 seconds
+- Live allowance queries through the official local Codex interface every 10 seconds
 - Compact mode when touching a screen edge
 - Always-on-top, system tray access, desktop shortcut, and optional startup without occupying the taskbar
 - Choose between hiding to the tray and exiting when closing
-- Local-only session reading with no network requests or data uploads
+- Automatic local-session fallback when the official interface is unavailable
+- The widget does not parse conversation content or upload data to a developer-operated server
 
 MIT License

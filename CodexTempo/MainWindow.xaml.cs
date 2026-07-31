@@ -14,7 +14,7 @@ namespace CodexTempo;
 
 public partial class MainWindow : Window
 {
-    private readonly CodexUsageReader _reader = new();
+    private readonly CodexUsageProvider _reader = new();
     private readonly DispatcherTimer _timer;
     private bool _refreshing;
     private bool _isPinned = true;
@@ -116,12 +116,15 @@ public partial class MainWindow : Window
             UpdateLimit(snapshot.Week, WeekPercent, WeekProgress, WeekReset, now);
 
             var age = now - snapshot.CapturedAt;
-            var fresh = age < TimeSpan.FromMinutes(3);
+            var isLive = snapshot.SourceFile == CodexAppServerClient.SourceName;
+            var fresh = isLive || age < TimeSpan.FromMinutes(3);
             StatusDot.Fill = Brush(fresh ? "#72A477" : "#D49A5B");
-            SyncLabel.Text = fresh
+            SyncLabel.Text = isLive
+                ? $"实时查询 · {snapshot.CapturedAt.ToLocalTime():HH:mm:ss}"
+                : fresh
                 ? $"额度更新 · {snapshot.CapturedAt.ToLocalTime():HH:mm:ss}"
                 : $"最后额度 · {snapshot.CapturedAt.ToLocalTime():MM-dd HH:mm}";
-            FooterLabel.Text = "每 10 秒检查新额度";
+            FooterLabel.Text = "每 10 秒查询实时额度";
         }
         catch
         {
@@ -196,8 +199,8 @@ public partial class MainWindow : Window
         ApplyTone(advice.Tone);
         UpdateLimit(sample.FiveHour, FivePercent, FiveProgress, FiveReset, now);
         UpdateLimit(sample.Week, WeekPercent, WeekProgress, WeekReset, now);
-        SyncLabel.Text = $"额度更新 · {DateTime.Now:HH:mm:ss}";
-        FooterLabel.Text = "每 10 秒检查新额度";
+        SyncLabel.Text = $"实时查询 · {DateTime.Now:HH:mm:ss}";
+        FooterLabel.Text = "每 10 秒查询实时额度";
     }
 
     public void PrepareCompactPreview() => DockToEdge(DockEdge.Right);

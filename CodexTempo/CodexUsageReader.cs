@@ -145,6 +145,9 @@ public sealed class CodexUsageReader : IDisposable
             : currentWeek.UsedPercent;
     }
 
+    internal Task<double?> EstimateTodayUsedForAsync(LimitWindow currentWeek, CancellationToken ct) =>
+        EstimateTodayUsedAsync(currentWeek, ct);
+
     private static async Task<UsageSnapshot?> ReadOldestFileSnapshotAsync(string path, CancellationToken ct)
     {
         const int probeSize = 512 * 1024;

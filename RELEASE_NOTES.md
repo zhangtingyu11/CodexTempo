@@ -1,19 +1,21 @@
-## v1.0.7
+## v1.0.8
 
-本次版本修复了多任务并行使用 Codex 时额度可能不刷新的问题。
+本次版本从根源上修复额度时间停住的问题。
 
-- 扩大并发 session 的检查范围，避免通用额度快照被其他任务挤出。
-- 状态栏现在显示真实额度快照时间，不再用轮询时间冒充更新时间。
-- 增加多 session 与追加写入的自动回归测试。
+- 主数据源改为 Codex 官方 App Server，不再等待 session 写入额度快照。
+- 每 10 秒复用同一个本地连接查询实时额度。
+- 官方接口不可用时自动回退本地 session，不影响基本显示。
+- 状态栏显示“实时查询”与本次官方查询时间。
 
-建议所有 v1.0.6 用户升级。
+建议所有 v1.0.7 用户升级。
 
 ---
 
-This release fixes stale allowance values when multiple Codex tasks are active.
+This release fixes allowance timestamps getting stuck at the source.
 
-- Broader concurrent-session coverage prevents the general allowance snapshot from being crowded out.
-- The status now shows the actual snapshot time rather than the polling time.
-- Added automated regression tests for concurrent sessions and appended snapshots.
+- The primary data source is now the official Codex App Server rather than session snapshots.
+- One local connection is reused for live queries every 10 seconds.
+- Local session data remains available as an automatic fallback.
+- The status clearly shows the latest live query time.
 
-Recommended for all v1.0.6 users.
+Recommended for all v1.0.7 users.
