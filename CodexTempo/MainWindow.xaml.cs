@@ -118,8 +118,10 @@ public partial class MainWindow : Window
             var age = now - snapshot.CapturedAt;
             var fresh = age < TimeSpan.FromMinutes(3);
             StatusDot.Fill = Brush(fresh ? "#72A477" : "#D49A5B");
-            SyncLabel.Text = fresh ? $"已同步 · {DateTime.Now:HH:mm:ss}" : $"最近数据 · {snapshot.CapturedAt:HH:mm}";
-            FooterLabel.Text = "每 10 秒自动刷新";
+            SyncLabel.Text = fresh
+                ? $"额度更新 · {snapshot.CapturedAt.ToLocalTime():HH:mm:ss}"
+                : $"最后额度 · {snapshot.CapturedAt.ToLocalTime():MM-dd HH:mm}";
+            FooterLabel.Text = "每 10 秒检查新额度";
         }
         catch
         {
@@ -194,8 +196,8 @@ public partial class MainWindow : Window
         ApplyTone(advice.Tone);
         UpdateLimit(sample.FiveHour, FivePercent, FiveProgress, FiveReset, now);
         UpdateLimit(sample.Week, WeekPercent, WeekProgress, WeekReset, now);
-        SyncLabel.Text = $"已同步 · {DateTime.Now:HH:mm:ss}";
-        FooterLabel.Text = "每 10 秒自动刷新";
+        SyncLabel.Text = $"额度更新 · {DateTime.Now:HH:mm:ss}";
+        FooterLabel.Text = "每 10 秒检查新额度";
     }
 
     public void PrepareCompactPreview() => DockToEdge(DockEdge.Right);

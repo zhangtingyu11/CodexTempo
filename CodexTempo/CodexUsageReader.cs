@@ -16,10 +16,13 @@ public sealed class CodexUsageReader : IDisposable
     private double _baselineWeekUsed;
     private sealed record CacheEntry(long FileLength, UsageSnapshot Snapshot);
 
-    public CodexUsageReader()
+    public CodexUsageReader() : this(Path.Combine(CodexPathResolver.ResolveHome(), "sessions"))
     {
-        var codexHome = CodexPathResolver.ResolveHome();
-        _sessionsRoot = Path.Combine(codexHome, "sessions");
+    }
+
+    internal CodexUsageReader(string sessionsRoot)
+    {
+        _sessionsRoot = sessionsRoot;
 
         if (Directory.Exists(_sessionsRoot))
         {
@@ -69,7 +72,14 @@ public sealed class CodexUsageReader : IDisposable
         LimitWindow? week = null;
         DateTimeOffset weekAt = DateTimeOffset.MinValue;
 
-        foreach (var file in files.DistinctBy(f => f.FullName).OrderByDescending(f => f.LastWriteTimeUtc).Take(8))
+        // Several Codex tasks can write session files at the same time. A small
+        // fixed limit here used to let model-specific sessions crowd the
+        // canonical account snapshot out of the scan, leaving the widget stuck
+        // on an old value. 128 cached metadata probes remain cheap while covering
+        // busy desktop sessions reliably.
+        foreach (var file in files.DistinctBy(f => f.FullName)
+                     .OrderByDescending(f => f.LastWriteTimeUtc)
+                     .Take(128))
         {
             cancellationToken.ThrowIfCancellationRequested();
             var snapshot = await ReadFileAsync(file.FullName, cancellationToken);
@@ -312,8 +322,77 @@ public sealed class CodexUsageReader : IDisposable
 
         var accepted = ParseLine(canonical, "canonical.jsonl");
         var rejected = ParseLine(modelSpecific, "model-specific.jsonl");
-        return accepted?.Week?.UsedPercent == 31 && rejected is null;
+        return accepted?.Week?.UsedPercent == 31
+               && rejected is null
+               && RunRefreshSelfTestCode() == 0;
     }
+
+    internal static int RunRefreshSelfTestCode() =>
+        Task.Run(RunRefreshSelfTestAsync).GetAwaiter().GetResult();
+
+    private static async Task<int> RunRefreshSelfTestAsync()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"codex-tempo-test-{Guid.NewGuid():N}");
+        var day = DateTime.Today;
+        var folder = Path.Combine(root, day.ToString("yyyy"), day.ToString("MM"), day.ToString("dd"));
+        Directory.CreateDirectory(folder);
+        var reset = DateTimeOffset.Now.AddDays(3).ToUnixTimeSeconds();
+        var canonical = Path.Combine(folder, "canonical.jsonl");
+
+        try
+        {
+            await File.WriteAllTextAsync(canonical,
+                BuildTestLine(20, reset, "2026-07-30T14:40:28Z"));
+
+            // More than the old eight-file scan limit, all newer than the
+            // canonical file and all intentionally irrelevant.
+            for (var i = 0; i < 12; i++)
+            {
+                var decoy = Path.Combine(folder, $"model-{i:00}.jsonl");
+                await File.WriteAllTextAsync(decoy,
+                    BuildTestLine(0, reset, "2026-07-30T14:40:38Z", "codex_bengalfox"));
+                File.SetLastWriteTimeUtc(decoy, DateTime.UtcNow.AddSeconds(i + 1));
+            }
+
+            using var reader = new CodexUsageReader(root);
+            var first = await reader.ReadLatestAsync();
+            if (first?.Week?.UsedPercent != 20) return 1;
+
+            await File.AppendAllTextAsync(canonical,
+                Environment.NewLine + BuildTestLine(24, reset, "2026-07-30T14:41:28Z"));
+            var second = await reader.ReadLatestAsync();
+            return second?.Week?.UsedPercent == 24 ? 0 : 2;
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
+    }
+
+    private static string BuildTestLine(
+        double usedPercent,
+        long reset,
+        string timestamp,
+        string limitId = "codex") =>
+        JsonSerializer.Serialize(new
+        {
+            timestamp,
+            payload = new
+            {
+                rate_limits = new
+                {
+                    limit_id = limitId,
+                    primary = new
+                    {
+                        used_percent = usedPercent,
+                        window_minutes = 10080,
+                        resets_at = reset
+                    }
+                }
+            }
+        });
 
     public void Dispose() => _watcher?.Dispose();
 }

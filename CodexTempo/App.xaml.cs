@@ -1,4 +1,5 @@
 using System.IO;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -9,6 +10,32 @@ public partial class App : System.Windows.Application
 {
     protected override void OnStartup(StartupEventArgs e)
     {
+        if (e.Args.Contains("--reader-refresh-test", StringComparer.OrdinalIgnoreCase))
+        {
+            Environment.Exit(CodexUsageReader.RunRefreshSelfTestCode());
+            return;
+        }
+
+        var dumpIndex = Array.FindIndex(e.Args, x =>
+            x.Equals("--dump-usage", StringComparison.OrdinalIgnoreCase));
+        if (dumpIndex >= 0 && dumpIndex + 1 < e.Args.Length)
+        {
+            try
+            {
+                using var reader = new CodexUsageReader();
+                var snapshot = Task.Run(() => reader.ReadLatestAsync()).GetAwaiter().GetResult();
+                File.WriteAllText(e.Args[dumpIndex + 1],
+                    JsonSerializer.Serialize(snapshot, new JsonSerializerOptions { WriteIndented = true }));
+                Environment.Exit(snapshot is null ? 1 : 0);
+            }
+            catch (Exception ex)
+            {
+                File.WriteAllText(e.Args[dumpIndex + 1] + ".error.txt", ex.ToString());
+                Environment.Exit(1);
+            }
+            return;
+        }
+
         if (e.Args.Contains("--self-test", StringComparer.OrdinalIgnoreCase))
         {
             Environment.Exit(
