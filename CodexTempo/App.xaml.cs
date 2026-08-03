@@ -70,6 +70,7 @@ public partial class App : System.Windows.Application
             Environment.Exit(
                 RecommendationEngine.RunSelfTest() &&
                 CodexAppServerClient.RunSelfTest() &&
+                CodexUsageProvider.RunSelfTest() &&
                 CodexUsageReader.RunSelfTest() &&
                 CodexTempo.MainWindow.RunDockingSelfTest()
                     ? 0

@@ -117,10 +117,13 @@ public partial class MainWindow : Window
 
             var age = now - snapshot.CapturedAt;
             var isLive = snapshot.SourceFile == CodexAppServerClient.SourceName;
+            var isCachedLive = snapshot.SourceFile == CodexUsageProvider.CachedSourceName;
             var fresh = isLive || age < TimeSpan.FromMinutes(3);
-            StatusDot.Fill = Brush(fresh ? "#72A477" : "#D49A5B");
+            StatusDot.Fill = Brush(isCachedLive ? "#D49A5B" : fresh ? "#72A477" : "#D49A5B");
             SyncLabel.Text = isLive
                 ? $"实时查询 · {snapshot.CapturedAt.ToLocalTime():HH:mm:ss}"
+                : isCachedLive
+                ? $"连接波动 · 保留 {snapshot.CapturedAt.ToLocalTime():HH:mm:ss}"
                 : fresh
                 ? $"额度更新 · {snapshot.CapturedAt.ToLocalTime():HH:mm:ss}"
                 : $"最后额度 · {snapshot.CapturedAt.ToLocalTime():MM-dd HH:mm}";

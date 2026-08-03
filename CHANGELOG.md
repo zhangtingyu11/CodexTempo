@@ -1,5 +1,11 @@
 # 更新日志 / Changelog
 
+## v1.0.9
+
+- 修复 App Server 短暂失败时切回旧 session，导致剩余额度来回跳变的问题。
+- 已取得官方值后，连接波动只保留最后可信值。
+- 同一重置周期内使用量单调防抖；新周期仍正常重置。
+
 ## v1.0.8
 
 - 改用 Codex 官方 App Server 实时查询额度，不再依赖 session 是否写入新快照。
@@ -17,6 +23,12 @@
 - 区分通用 Codex 额度与模型专属额度，避免模型专属空额度被误显示为本周 100%。
 
 ---
+
+## v1.0.9 (English)
+
+- Fixed quota jumps caused by switching to an older session snapshot after a brief App Server failure.
+- Keeps the last trusted official value during transient connection errors.
+- Adds monotonic smoothing within one reset window while still accepting real resets.
 
 ## v1.0.8 (English)
 

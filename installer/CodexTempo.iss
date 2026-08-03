@@ -1,6 +1,6 @@
 #define MyAppName "Codex Tempo"
 #ifndef MyAppVersion
-  #define MyAppVersion "1.0.8"
+  #define MyAppVersion "1.0.9"
 #endif
 #define MyAppPublisher "Grapymage"
 #define MyAppURL "https://github.com/zhangtingyu11/CodexTempo"

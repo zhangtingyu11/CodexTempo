@@ -21,6 +21,7 @@
 - 窗口置顶、托盘入口、桌面快捷方式与开机启动选项，不占用任务栏
 - 关闭时可选择隐藏到托盘或彻底退出
 - 官方接口不可用时自动回退本地 session
+- 短暂连接波动时保留最后可信值，避免额度来回跳变
 - 小组件不解析对话正文，也不向开发者服务器上传数据
 
 ## 支持
@@ -52,6 +53,7 @@ Just run the installer—no configuration or separate .NET installation is requi
 - Always-on-top, system tray access, desktop shortcut, and optional startup without occupying the taskbar
 - Choose between hiding to the tray and exiting when closing
 - Automatic local-session fallback when the official interface is unavailable
+- Keeps the last trusted value during brief connection failures to prevent quota jumps
 - The widget does not parse conversation content or upload data to a developer-operated server
 
 MIT License
