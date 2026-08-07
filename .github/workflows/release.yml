@@ -8,12 +8,9 @@ on:
 
 permissions:
   contents: write
-  id-token: write
 
 jobs:
   windows:
-    env:
-      SIGNING_METHOD: ${{ vars.CODE_SIGNING_METHOD }}
     strategy:
       fail-fast: false
       matrix:
@@ -33,47 +30,6 @@ jobs:
           -p:PublishSingleFile=true
           -p:PublishReadyToRun=false
           -o .\artifacts\${{ matrix.runtime }}
-      - name: Validate signing configuration
-        shell: pwsh
-        run: |
-          if ($env:SIGNING_METHOD -and $env:SIGNING_METHOD -notin @("azure", "pfx")) {
-            throw "CODE_SIGNING_METHOD must be 'azure', 'pfx', or left empty."
-          }
-      - name: Sign in to Azure with OpenID Connect
-        if: env.SIGNING_METHOD == 'azure'
-        uses: azure/login@v3
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-      - name: Sign application with Azure Artifact Signing
-        if: env.SIGNING_METHOD == 'azure'
-        uses: azure/artifact-signing-action@v2
-        with:
-          endpoint: ${{ vars.AZURE_SIGNING_ENDPOINT }}
-          signing-account-name: ${{ vars.AZURE_SIGNING_ACCOUNT }}
-          certificate-profile-name: ${{ vars.AZURE_CERTIFICATE_PROFILE }}
-          files: ${{ github.workspace }}\artifacts\${{ matrix.runtime }}\CodexTempo.exe
-          file-digest: SHA256
-          timestamp-rfc3161: http://timestamp.acs.microsoft.com
-          timestamp-digest: SHA256
-          description: Codex Tempo
-          description-url: https://github.com/zhangtingyu11/CodexTempo
-      - name: Sign application with a PFX certificate
-        if: env.SIGNING_METHOD == 'pfx'
-        shell: pwsh
-        env:
-          CODE_SIGNING_PFX_BASE64: ${{ secrets.CODE_SIGNING_PFX_BASE64 }}
-          CODE_SIGNING_PFX_PASSWORD: ${{ secrets.CODE_SIGNING_PFX_PASSWORD }}
-        run: >
-          .\tools\Sign-Windows.ps1
-          -FilePath ".\artifacts\${{ matrix.runtime }}\CodexTempo.exe"
-          -PfxBase64 $env:CODE_SIGNING_PFX_BASE64
-          -PfxPassword $env:CODE_SIGNING_PFX_PASSWORD
-      - name: Verify application signature
-        if: env.SIGNING_METHOD != ''
-        shell: pwsh
-        run: .\tools\Test-WindowsSignature.ps1 -FilePath ".\artifacts\${{ matrix.runtime }}\CodexTempo.exe"
       - name: Package
         shell: pwsh
         run: Compress-Archive -Path ".\artifacts\${{ matrix.runtime }}\*" -DestinationPath ".\CodexTempo-${{ matrix.runtime }}.zip"
@@ -84,34 +40,6 @@ jobs:
           choco install innosetup --no-progress -y
           $version = "${{ github.ref_name }}".TrimStart("v")
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DMyAppVersion=$version" ".\installer\CodexTempo.iss"
-      - name: Sign installer with Azure Artifact Signing
-        if: matrix.runtime == 'win-x64' && env.SIGNING_METHOD == 'azure'
-        uses: azure/artifact-signing-action@v2
-        with:
-          endpoint: ${{ vars.AZURE_SIGNING_ENDPOINT }}
-          signing-account-name: ${{ vars.AZURE_SIGNING_ACCOUNT }}
-          certificate-profile-name: ${{ vars.AZURE_CERTIFICATE_PROFILE }}
-          files: ${{ github.workspace }}\CodexTempo-Setup-x64.exe
-          file-digest: SHA256
-          timestamp-rfc3161: http://timestamp.acs.microsoft.com
-          timestamp-digest: SHA256
-          description: Codex Tempo Installer
-          description-url: https://github.com/zhangtingyu11/CodexTempo
-      - name: Sign installer with a PFX certificate
-        if: matrix.runtime == 'win-x64' && env.SIGNING_METHOD == 'pfx'
-        shell: pwsh
-        env:
-          CODE_SIGNING_PFX_BASE64: ${{ secrets.CODE_SIGNING_PFX_BASE64 }}
-          CODE_SIGNING_PFX_PASSWORD: ${{ secrets.CODE_SIGNING_PFX_PASSWORD }}
-        run: >
-          .\tools\Sign-Windows.ps1
-          -FilePath ".\CodexTempo-Setup-x64.exe"
-          -PfxBase64 $env:CODE_SIGNING_PFX_BASE64
-          -PfxPassword $env:CODE_SIGNING_PFX_PASSWORD
-      - name: Verify installer signature
-        if: matrix.runtime == 'win-x64' && env.SIGNING_METHOD != ''
-        shell: pwsh
-        run: .\tools\Test-WindowsSignature.ps1 -FilePath ".\CodexTempo-Setup-x64.exe"
       - uses: actions/upload-artifact@v4
         with:
           name: CodexTempo-${{ matrix.runtime }}
