@@ -1,21 +1,21 @@
-## v1.0.9
+## v1.1.0
 
-本次版本修复剩余额度在两个数值之间来回跳变的问题。
+Codex Tempo 现在同时提供 Windows 与 macOS 版本。
 
-- 原因是 App Server 偶发一次失败时，旧版会立即切回较旧的 session 快照。
-- 现在已获得官方值后，短暂失败会保留最后可信值。
-- 同一重置周期内使用量只能向上，拦截过期节点返回的较低数值。
-- 真正进入新的重置周期时，仍会正常接受较低初始值。
-
-建议所有 v1.0.8 用户升级。
+- 新增可直接下载的 macOS 通用 DMG，同时支持 Apple 芯片和 Intel Mac。
+- Windows 与 macOS 统一为 Apple 灰、系统蓝、额度卡片和蓝色叶片图标。
+- Windows 新增跟随系统的浅色/深色模式，并记住上次完整窗口位置。
+- 两个平台统一从 GitHub 标签取得版本号，避免版本不一致。
+- 优化 macOS 今日用量基线，避免重复扫描大量 session 文件。
+- 保留 Windows 边缘吸附紧凑模式；macOS 保留原生菜单栏体验。
 
 ---
 
-This release fixes remaining quota values jumping back and forth.
+Codex Tempo is now available for both Windows and macOS.
 
-- A brief App Server failure previously caused an immediate switch to an older session snapshot.
-- The widget now retains the last trusted official value during transient failures.
-- Usage is monotonic within the same reset window, filtering stale replica responses.
-- A genuine new reset window still accepts its lower initial value normally.
-
-Recommended for all v1.0.8 users.
+- Adds a universal macOS DMG for Apple silicon and Intel Macs.
+- Unifies both platforms around the Apple-gray, system-blue quota-card design and blue leaf icon.
+- Adds system-aware light/dark mode and remembered window placement on Windows.
+- Keeps Windows edge docking and the native macOS menu bar experience.
+- Uses one version number from the GitHub release tag across both platforms.
+- Caches the macOS daily baseline to avoid repeatedly scanning session files.

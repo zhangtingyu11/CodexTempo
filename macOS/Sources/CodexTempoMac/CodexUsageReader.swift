@@ -6,6 +6,9 @@ final class CodexUsageReader: @unchecked Sendable {
     private let calendar: Calendar
     private let now: () -> Date
     private let probeSize = 512 * 1_024
+    private var baselineDay: Date?
+    private var baselineReset: Date?
+    private var baselineWeekUsed: Double?
 
     init(
         sessionsRoot: URL = CodexPathResolver.resolveHome().appendingPathComponent("sessions", isDirectory: true),
@@ -55,22 +58,48 @@ final class CodexUsageReader: @unchecked Sendable {
     }
 
     private func estimateTodayUsed(currentWeek: LimitWindow, at date: Date) -> Double {
-        var baselines: [UsageSnapshot] = []
-        for dayOffset in [-1, 0] {
-            guard let day = calendar.date(byAdding: .day, value: dayOffset, to: date) else { continue }
-            for file in files(in: directory(for: day)).prefix(128) {
-                guard let snapshot = readOldest(from: file),
+        let currentDay = calendar.startOfDay(for: date)
+        if let baselineDay, calendar.isDate(baselineDay, inSameDayAs: currentDay),
+           let baselineReset, sameReset(baselineReset, currentWeek.resetsAt),
+           let baselineWeekUsed {
+            return currentWeek.usedPercent >= baselineWeekUsed
+                ? currentWeek.usedPercent - baselineWeekUsed
+                : currentWeek.usedPercent
+        }
+
+        var baseline: UsageSnapshot?
+        if let previousDay = calendar.date(byAdding: .day, value: -1, to: date) {
+            for file in files(in: directory(for: previousDay))
+                .sorted(by: { modificationDate($0) > modificationDate($1) })
+                .prefix(16) {
+                guard let snapshot = readNewest(from: file),
                       let week = snapshot.week,
                       sameReset(week.resetsAt, currentWeek.resetsAt) else { continue }
-                if dayOffset == -1 || calendar.isDate(snapshot.capturedAt, inSameDayAs: date) {
-                    baselines.append(snapshot)
+                if baseline == nil || snapshot.capturedAt > baseline!.capturedAt {
+                    baseline = snapshot
                 }
             }
         }
-        let baseline = baselines.min(by: { $0.capturedAt < $1.capturedAt })?.week?.usedPercent
-            ?? currentWeek.usedPercent
-        return currentWeek.usedPercent >= baseline
-            ? currentWeek.usedPercent - baseline
+
+        if baseline == nil {
+            for file in files(in: directory(for: date))
+                .sorted(by: { modificationDate($0) < modificationDate($1) })
+                .prefix(32) {
+                guard let snapshot = readOldest(from: file),
+                      let week = snapshot.week,
+                      sameReset(week.resetsAt, currentWeek.resetsAt) else { continue }
+                if baseline == nil || snapshot.capturedAt < baseline!.capturedAt {
+                    baseline = snapshot
+                }
+            }
+        }
+
+        let used = baseline?.week?.usedPercent ?? currentWeek.usedPercent
+        baselineDay = currentDay
+        baselineReset = currentWeek.resetsAt
+        baselineWeekUsed = used
+        return currentWeek.usedPercent >= used
+            ? currentWeek.usedPercent - used
             : currentWeek.usedPercent
     }
 

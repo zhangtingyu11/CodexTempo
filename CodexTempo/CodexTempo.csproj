@@ -12,11 +12,14 @@
     <ApplicationIcon>Assets\CodexTempo.ico</ApplicationIcon>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <DebugType Condition="'$(Configuration)' == 'Release'">none</DebugType>
-    <Version>1.0.9</Version>
+    <Version>1.1.0</Version>
     <Product>Codex Tempo</Product>
     <Description>A quiet Windows widget for pacing Codex usage limits.</Description>
     <Authors>Codex Tempo contributors</Authors>
     <RepositoryType>git</RepositoryType>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
   </PropertyGroup>
+  <ItemGroup>
+    <Resource Include="..\macOS\Assets\AppIcon.png" Link="Assets\AppIcon.png" />
+  </ItemGroup>
 </Project>

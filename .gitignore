@@ -7,3 +7,5 @@ artifacts/
 *.user
 *.suo
 CodexTempo-*.png
+macOS/build/
+macOS/.build/

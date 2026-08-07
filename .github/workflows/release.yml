@@ -21,6 +21,17 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0.x"
+      - name: Resolve version
+        shell: pwsh
+        run: |
+          [xml]$project = Get-Content ".\CodexTempo\CodexTempo.csproj"
+          $fallback = @($project.Project.PropertyGroup.Version)[0]
+          $version = if ("${{ github.ref_type }}" -eq "tag") {
+            "${{ github.ref_name }}".TrimStart("v")
+          } else {
+            $fallback
+          }
+          "APP_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
       - name: Publish
         run: >
           dotnet publish .\CodexTempo\CodexTempo.csproj
@@ -29,6 +40,7 @@ jobs:
           --self-contained true
           -p:PublishSingleFile=true
           -p:PublishReadyToRun=false
+          -p:Version=${{ env.APP_VERSION }}
           -o .\artifacts\${{ matrix.runtime }}
       - name: Package
         shell: pwsh
@@ -38,8 +50,7 @@ jobs:
         shell: pwsh
         run: |
           choco install innosetup --no-progress -y
-          $version = "${{ github.ref_name }}".TrimStart("v")
-          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DMyAppVersion=$version" ".\installer\CodexTempo.iss"
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DMyAppVersion=${{ env.APP_VERSION }}" ".\installer\CodexTempo.iss"
       - uses: actions/upload-artifact@v4
         with:
           name: CodexTempo-${{ matrix.runtime }}
@@ -55,3 +66,29 @@ jobs:
             CodexTempo-${{ matrix.runtime }}.zip
             CodexTempo-Setup-x64.exe
           fail_on_unmatched_files: false
+
+  macos:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resolve version
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            version="${GITHUB_REF_NAME#v}"
+          else
+            version="$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' CodexTempo/CodexTempo.csproj | head -1)"
+          fi
+          echo "APP_VERSION=$version" >> "$GITHUB_ENV"
+      - name: Build, test, and package universal macOS app
+        run: ./macOS/scripts/package-dmg.sh "$APP_VERSION"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CodexTempo-macOS-universal
+          path: macOS/build/CodexTempo-macOS-universal.dmg
+      - uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          body_path: RELEASE_NOTES.md
+          files: macOS/build/CodexTempo-macOS-universal.dmg
+          fail_on_unmatched_files: true

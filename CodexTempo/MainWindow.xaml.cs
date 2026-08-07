@@ -8,6 +8,7 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
+using Microsoft.Win32;
 using Forms = System.Windows.Forms;
 
 namespace CodexTempo;
@@ -16,15 +17,19 @@ public partial class MainWindow : Window
 {
     private readonly CodexUsageProvider _reader = new();
     private readonly DispatcherTimer _timer;
+    private readonly DispatcherTimer _positionSaveTimer;
     private bool _refreshing;
+    private bool _isDark;
     private bool _isPinned = true;
     private bool _isDocked;
     private bool _allowClose;
     private bool _closePromptOpen;
+    private readonly bool _previewMode;
     private DockEdge _dockEdge;
     private readonly Forms.NotifyIcon _trayIcon;
-    private const double FullWidth = 372;
-    private const double FullHeight = 278;
+    private PaceTone _currentTone = PaceTone.Waiting;
+    private const double FullWidth = 420;
+    private const double FullHeight = 340;
     private const double HorizontalCompactWidth = 244;
     private const double HorizontalCompactHeight = 58;
     private const double VerticalCompactWidth = 150;
@@ -56,9 +61,32 @@ public partial class MainWindow : Window
 
     public MainWindow(bool previewMode = false)
     {
+        _previewMode = previewMode;
         InitializeComponent();
+        _isDark = ThemeService.Apply(
+            Resources,
+            Environment.GetCommandLineArgs().Contains("--dark-preview", StringComparer.OrdinalIgnoreCase)
+                ? true
+                : null);
         _trayIcon = previewMode ? new Forms.NotifyIcon() : CreateTrayIcon();
-        RestorePosition();
+        if (!previewMode) RestorePosition();
+        _positionSaveTimer = new DispatcherTimer(DispatcherPriority.Background)
+        {
+            Interval = TimeSpan.FromMilliseconds(500)
+        };
+        _positionSaveTimer.Tick += (_, _) =>
+        {
+            _positionSaveTimer.Stop();
+            if (!_previewMode && !_isDocked && WindowState == WindowState.Normal)
+                WindowPlacementStore.Save(Left, Top);
+        };
+        LocationChanged += (_, _) =>
+        {
+            if (_isDocked) return;
+            _positionSaveTimer.Stop();
+            _positionSaveTimer.Start();
+        };
+        if (!previewMode) SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
         _timer = new DispatcherTimer(DispatcherPriority.Background)
         {
             Interval = TimeSpan.FromSeconds(10)
@@ -119,7 +147,7 @@ public partial class MainWindow : Window
             var isLive = snapshot.SourceFile == CodexAppServerClient.SourceName;
             var isCachedLive = snapshot.SourceFile == CodexUsageProvider.CachedSourceName;
             var fresh = isLive || age < TimeSpan.FromMinutes(3);
-            StatusDot.Fill = Brush(isCachedLive ? "#D49A5B" : fresh ? "#72A477" : "#D49A5B");
+            StatusDot.Fill = Brush(isCachedLive ? "#FF9F0A" : fresh ? "#34C759" : "#FF9F0A");
             SyncLabel.Text = isLive
                 ? $"实时查询 · {snapshot.CapturedAt.ToLocalTime():HH:mm:ss}"
                 : isCachedLive
@@ -132,7 +160,7 @@ public partial class MainWindow : Window
         catch
         {
             SyncLabel.Text = "暂时无法读取 · 将自动重试";
-            StatusDot.Fill = Brush("#C9826C");
+            StatusDot.Fill = Brush("#FF3B30");
         }
         finally
         {
@@ -161,18 +189,24 @@ public partial class MainWindow : Window
 
     private void ApplyTone(PaceTone tone)
     {
-        var (pill, text, bar) = tone switch
+        _currentTone = tone;
+        var (pill, text) = (_isDark, tone) switch
         {
-            PaceTone.Encourage => ("#E0ECE5", "#4D725C", "#6F9A7D"),
-            PaceTone.Caution => ("#F1E9D9", "#856C3D", "#C49B55"),
-            PaceTone.Urgent => ("#F2E2DC", "#8B5E50", "#C67D68"),
-            PaceTone.Waiting => ("#E9E9E4", "#727871", "#929990"),
-            _ => ("#E4E9DF", "#526756", "#607A66")
+            (true, PaceTone.Encourage) => ("#20382A", "#66D487"),
+            (true, PaceTone.Caution) => ("#3B3120", "#FFB340"),
+            (true, PaceTone.Urgent) => ("#3D2524", "#FF6961"),
+            (true, PaceTone.Waiting) => ("#343438", "#A3A3AA"),
+            (true, _) => ("#20334A", "#64A8FF"),
+            (false, PaceTone.Encourage) => ("#E8F7ED", "#248A3D"),
+            (false, PaceTone.Caution) => ("#FFF4DF", "#9A6700"),
+            (false, PaceTone.Urgent) => ("#FFF0ED", "#C9342B"),
+            (false, PaceTone.Waiting) => ("#EBEBF0", "#6E6E73"),
+            _ => ("#E7F1FF", "#0066CC")
         };
         RatePill.Background = Brush(pill);
         RateLabel.Foreground = Brush(text);
-        FiveProgress.Foreground = Brush(bar);
-        WeekProgress.Foreground = Brush(bar);
+        FiveProgress.Foreground = (System.Windows.Media.Brush)FindResource("Accent");
+        WeekProgress.Foreground = (System.Windows.Media.Brush)FindResource("Accent");
     }
 
     private void ShowUnavailable()
@@ -182,7 +216,7 @@ public partial class MainWindow : Window
         RateLabel.Text = "本地待命";
         ApplyTone(PaceTone.Waiting);
         SyncLabel.Text = "未找到最近的 session 数据";
-        StatusDot.Fill = Brush("#B2B7B0");
+        StatusDot.Fill = Brush(_isDark ? "#77777E" : "#8E8E93");
     }
 
     public void PreparePreview()
@@ -252,7 +286,9 @@ public partial class MainWindow : Window
     {
         Topmost = _isPinned;
         PinButton.Content = _isPinned ? "\uE840" : "\uE77A";
-        PinButton.Foreground = Brush(_isPinned ? "#58705D" : "#9AA09A");
+        PinButton.Foreground = _isPinned
+            ? (System.Windows.Media.Brush)FindResource("Accent")
+            : (System.Windows.Media.Brush)FindResource("Muted");
         PinButton.ToolTip = _isPinned ? "已置顶，点击取消" : "未置顶，点击保持在最前";
 
         var handle = new WindowInteropHelper(this).Handle;
@@ -292,14 +328,26 @@ public partial class MainWindow : Window
 
     private static Drawing.Icon CreateTrayLeafIcon()
     {
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(Environment.ProcessPath))
+            {
+                using var associated = Drawing.Icon.ExtractAssociatedIcon(Environment.ProcessPath);
+                if (associated is not null) return (Drawing.Icon)associated.Clone();
+            }
+        }
+        catch
+        {
+        }
+
         using var bitmap = new Drawing.Bitmap(32, 32, Drawing.Imaging.PixelFormat.Format32bppArgb);
         using (var graphics = Drawing.Graphics.FromImage(bitmap))
         {
             graphics.SmoothingMode = Drawing.Drawing2D.SmoothingMode.AntiAlias;
             graphics.Clear(Drawing.Color.Transparent);
-            using var background = new Drawing.SolidBrush(Drawing.Color.FromArgb(255, 72, 105, 79));
-            using var leaf = new Drawing.SolidBrush(Drawing.Color.FromArgb(255, 238, 244, 234));
-            using var vein = new Drawing.Pen(Drawing.Color.FromArgb(255, 96, 122, 102), 2.2f)
+            using var background = new Drawing.SolidBrush(Drawing.Color.FromArgb(255, 0, 122, 255));
+            using var leaf = new Drawing.SolidBrush(Drawing.Color.White);
+            using var vein = new Drawing.Pen(Drawing.Color.FromArgb(255, 0, 98, 214), 2.2f)
             {
                 StartCap = Drawing.Drawing2D.LineCap.Round,
                 EndCap = Drawing.Drawing2D.LineCap.Round
@@ -399,6 +447,13 @@ public partial class MainWindow : Window
 
     private void RestorePosition()
     {
+        if (WindowPlacementStore.Load() is { } saved && IsVisiblePosition(saved.Left, saved.Top))
+        {
+            Left = saved.Left;
+            Top = saved.Top;
+            return;
+        }
+
         var area = SystemParameters.WorkArea;
         var instanceOffset = Math.Clamp(
             Process.GetProcessesByName("CodexTempo").Length - 1,
@@ -406,6 +461,27 @@ public partial class MainWindow : Window
             5) * 28;
         Left = Math.Max(area.Left, area.Right - Width - 24 - instanceOffset);
         Top = Math.Max(area.Top, area.Bottom - Height - 24 - instanceOffset);
+    }
+
+    private static bool IsVisiblePosition(double left, double top)
+    {
+        const double visibleEdge = 48;
+        var virtualLeft = SystemParameters.VirtualScreenLeft;
+        var virtualTop = SystemParameters.VirtualScreenTop;
+        var virtualRight = virtualLeft + SystemParameters.VirtualScreenWidth;
+        var virtualBottom = virtualTop + SystemParameters.VirtualScreenHeight;
+        return left + visibleEdge >= virtualLeft && left <= virtualRight - visibleEdge &&
+               top + visibleEdge >= virtualTop && top <= virtualBottom - visibleEdge;
+    }
+
+    private void OnUserPreferenceChanged(object sender, UserPreferenceChangedEventArgs e)
+    {
+        Dispatcher.BeginInvoke(() =>
+        {
+            _isDark = ThemeService.Apply(Resources);
+            ApplyTone(_currentTone);
+            ApplyPinnedState();
+        });
     }
 
     private void EvaluateEdgeDock()
@@ -506,6 +582,28 @@ public partial class MainWindow : Window
         VerticalLimitsPanel.Visibility = isVertical ? Visibility.Visible : Visibility.Collapsed;
         FiveProgress.Visibility = Visibility.Collapsed;
         WeekProgress.Visibility = Visibility.Collapsed;
+        FiveCard.Padding = new Thickness(0);
+        WeekCard.Padding = new Thickness(0);
+        FiveCard.Background = System.Windows.Media.Brushes.Transparent;
+        WeekCard.Background = System.Windows.Media.Brushes.Transparent;
+        FiveCard.BorderThickness = new Thickness(0);
+        WeekCard.BorderThickness = new Thickness(0);
+        CompactDivider.Visibility = isVertical ? Visibility.Collapsed : Visibility.Visible;
+        QuotaGap.Width = new GridLength(12);
+        FiveLimitHeader.Height = double.NaN;
+        WeekLimitHeader.Height = double.NaN;
+        FiveTitle.Text = "5 小时";
+        WeekTitle.Text = "本周";
+        FiveTitle.VerticalAlignment = VerticalAlignment.Center;
+        WeekTitle.VerticalAlignment = VerticalAlignment.Center;
+        FivePercent.HorizontalAlignment = System.Windows.HorizontalAlignment.Right;
+        WeekPercent.HorizontalAlignment = System.Windows.HorizontalAlignment.Right;
+        FivePercent.VerticalAlignment = VerticalAlignment.Center;
+        WeekPercent.VerticalAlignment = VerticalAlignment.Center;
+        FivePercent.FontSize = 16;
+        WeekPercent.FontSize = 16;
+        FivePercent.Foreground = (System.Windows.Media.Brush)FindResource("Ink");
+        WeekPercent.Foreground = (System.Windows.Media.Brush)FindResource("Ink");
         FiveLimitHeader.Margin = new Thickness(0, 0, 0, 2);
         WeekLimitHeader.Margin = new Thickness(0, 0, 0, 2);
         FiveReset.Margin = new Thickness(0);
@@ -552,27 +650,48 @@ public partial class MainWindow : Window
 
         var previousEdge = _dockEdge;
         _isDocked = false;
-        HeaderRow.Height = new GridLength(50);
-        AdviceRow.Height = new GridLength(70);
-        LimitsRow.Height = new GridLength(68);
+        HeaderRow.Height = new GridLength(54);
+        AdviceRow.Height = new GridLength(76);
+        LimitsRow.Height = new GridLength(142);
         FooterRow.Height = new GridLength(1, GridUnitType.Star);
         Width = FullWidth;
         Height = FullHeight;
         WidgetShell.Effect =
             (System.Windows.Media.Effects.Effect)FindResource("SoftShadow");
-        WidgetShell.Margin = new Thickness(16);
-        WidgetShell.CornerRadius = new CornerRadius(22);
+        WidgetShell.Margin = new Thickness(12);
+        WidgetShell.CornerRadius = new CornerRadius(18);
         LimitsPanel.Visibility = Visibility.Visible;
         VerticalLimitsPanel.Visibility = Visibility.Collapsed;
         FiveProgress.Visibility = Visibility.Visible;
         WeekProgress.Visibility = Visibility.Visible;
-        FiveLimitHeader.Margin = new Thickness(0, 0, 0, 8);
-        WeekLimitHeader.Margin = new Thickness(0, 0, 0, 8);
-        FiveReset.Margin = new Thickness(0, 7, 0, 0);
-        WeekReset.Margin = new Thickness(0, 7, 0, 0);
+        FiveCard.Padding = new Thickness(15, 13, 15, 13);
+        WeekCard.Padding = new Thickness(15, 13, 15, 13);
+        FiveCard.SetResourceReference(Border.BackgroundProperty, "CardBackground");
+        WeekCard.SetResourceReference(Border.BackgroundProperty, "CardBackground");
+        FiveCard.BorderThickness = new Thickness(1);
+        WeekCard.BorderThickness = new Thickness(1);
+        CompactDivider.Visibility = Visibility.Collapsed;
+        FiveLimitHeader.Height = 55;
+        WeekLimitHeader.Height = 55;
+        FiveLimitHeader.Margin = new Thickness(0, 0, 0, 7);
+        WeekLimitHeader.Margin = new Thickness(0, 0, 0, 7);
+        FiveReset.Margin = new Thickness(0, 8, 0, 0);
+        WeekReset.Margin = new Thickness(0, 8, 0, 0);
+        FiveTitle.Text = "5 小时额度";
+        WeekTitle.Text = "每周额度";
+        FiveTitle.VerticalAlignment = VerticalAlignment.Top;
+        WeekTitle.VerticalAlignment = VerticalAlignment.Top;
+        FivePercent.HorizontalAlignment = System.Windows.HorizontalAlignment.Left;
+        WeekPercent.HorizontalAlignment = System.Windows.HorizontalAlignment.Left;
+        FivePercent.VerticalAlignment = VerticalAlignment.Bottom;
+        WeekPercent.VerticalAlignment = VerticalAlignment.Bottom;
+        FivePercent.FontSize = 33;
+        WeekPercent.FontSize = 33;
+        FivePercent.Foreground = (System.Windows.Media.Brush)FindResource("Accent");
+        WeekPercent.Foreground = (System.Windows.Media.Brush)FindResource("Accent");
         FiveLimitStack.VerticalAlignment = VerticalAlignment.Stretch;
         WeekLimitStack.VerticalAlignment = VerticalAlignment.Stretch;
-        LimitsPanel.Margin = new Thickness(20, 5, 20, 0);
+        LimitsPanel.Margin = new Thickness(20, 8, 20, 0);
         WidgetShell.ToolTip = null;
 
         UpdateLayout();
@@ -628,6 +747,9 @@ public partial class MainWindow : Window
         }
 
         _timer.Stop();
+        _positionSaveTimer.Stop();
+        if (!_previewMode && !_isDocked) WindowPlacementStore.Save(Left, Top);
+        if (!_previewMode) SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
         _reader.Dispose();
         _trayIcon.Visible = false;
         _trayIcon.Dispose();

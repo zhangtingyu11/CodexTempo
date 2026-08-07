@@ -9,6 +9,7 @@ public partial class CloseChoiceDialog : Window
     public CloseChoiceDialog()
     {
         InitializeComponent();
+        ThemeService.Apply(Resources);
     }
 
     private void HideButton_Click(object sender, RoutedEventArgs e)

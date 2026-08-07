@@ -97,7 +97,7 @@ public sealed class CodexAppServerClient : IDisposable
                     {
                         name = "codex_tempo",
                         title = "Codex Tempo",
-                        version = "1.0.9"
+                        version = typeof(CodexAppServerClient).Assembly.GetName().Version?.ToString(3) ?? "1.1.0"
                     }
                 });
             if (!initialized.TryGetProperty("result", out _))

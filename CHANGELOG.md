@@ -1,5 +1,21 @@
 # 更新日志 / Changelog
 
+## v1.1.0
+
+- 新增 macOS 通用 DMG，支持 Apple 芯片与 Intel Mac。
+- Windows 与 macOS 统一视觉和应用图标。
+- Windows 新增系统深浅色适配与窗口位置记忆。
+- 统一两端版本号，并优化 macOS 今日用量读取性能。
+
+---
+
+## v1.1.0 (English)
+
+- Added a universal macOS DMG for Apple silicon and Intel Macs.
+- Unified the visual system and application icon across platforms.
+- Added system light/dark mode and remembered window placement on Windows.
+- Unified versioning and optimized macOS daily-usage reads.
+
 ## v1.0.9
 
 - 修复 App Server 短暂失败时切回旧 session，导致剩余额度来回跳变的问题。

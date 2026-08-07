@@ -65,7 +65,7 @@ actor CodexAppServerClient {
                 "clientInfo": [
                     "name": "codex_tempo_mac",
                     "title": "Codex Tempo",
-                    "version": "1.0.0"
+                    "version": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.1.0"
                 ]
             ]
         ), response["result"] != nil else {

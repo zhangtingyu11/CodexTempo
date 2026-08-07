@@ -33,16 +33,16 @@ public static class RecommendationEngine
             : $"今日约 {todayUsed:0.#}% · 已超目标 {todayUsed - perDay:0.#}% · 本周 {week.UsedPercent:0.#}%";
 
         if (rate < .5)
-            return new("先缓一缓", detail,
+            return new("建议休息一下", detail,
                 $"{rate:0.0}× 周均速", rate, perDay, PaceTone.Urgent);
         if (rate < .82)
-            return new("放慢一点", detail,
+            return new("今天节奏偏快", detail,
                 $"{rate:0.0}× 周均速", rate, perDay, PaceTone.Caution);
         if (rate <= 1.22)
-            return new("保持这个节奏", detail,
+            return new("保持稳定", detail,
                 $"{rate:0.0}× 周均速", rate, perDay, PaceTone.Calm);
 
-        return new("可以多用一些", detail,
+        return new("今天表现不错", detail,
             $"{rate:0.0}× 周均速", rate, perDay, PaceTone.Encourage);
     }
 
