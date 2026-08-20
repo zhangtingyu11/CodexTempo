@@ -115,8 +115,8 @@ struct TempoPanelView: View {
             ) {
                 model.isPinned.toggle()
             }
-            chromeButton(symbol: "minus", help: "隐藏面板") {
-                model.hideWindow()
+            chromeButton(symbol: "minus", help: "最小化") {
+                model.minimizeWindow()
             }
         }
         .buttonStyle(.plain)
@@ -333,12 +333,13 @@ struct MenuPopoverView: View {
                 }
                 .buttonStyle(.bordered)
                 Spacer()
-                Button("退出") { NSApp.terminate(nil) }
+                Button("隐藏面板") { model.hideToMenuBar() }
                     .buttonStyle(.plain)
             }
         }
         .padding(16)
         .frame(width: 320)
+        .background(MenuBarWindowConfigurator())
     }
 
     private func compactQuota(_ title: String, _ window: LimitWindow?) -> some View {
@@ -371,6 +372,46 @@ struct MenuPopoverView: View {
     }
 }
 
+struct TempoSettingsView: View {
+    @ObservedObject var model: AppModel
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            HStack(spacing: 10) {
+                TempoAppIcon(size: 32)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Codex Tempo")
+                        .font(.system(size: 16, weight: .semibold))
+                    Text("常规设置")
+                        .font(.system(size: 12))
+                        .foregroundStyle(ApplePalette.secondary(colorScheme))
+                }
+            }
+
+            Divider()
+
+            VStack(spacing: 14) {
+                Toggle("登录时启动", isOn: Binding(
+                    get: { model.launchAtLoginEnabled },
+                    set: { model.setLaunchAtLogin($0) }
+                ))
+                Toggle("窗口置顶", isOn: $model.isPinned)
+            }
+            .toggleStyle(.switch)
+            .tint(ApplePalette.accent)
+
+            if let message = model.settingsMessage {
+                Text(message)
+                    .font(.system(size: 12))
+                    .foregroundStyle(ApplePalette.warning)
+            }
+        }
+        .padding(24)
+        .frame(width: 360)
+    }
+}
+
 struct WindowConfigurator: NSViewRepresentable {
     let model: AppModel
 
@@ -385,6 +426,26 @@ struct WindowConfigurator: NSViewRepresentable {
     func updateNSView(_ nsView: NSView, context: Context) {
         DispatchQueue.main.async {
             if let window = nsView.window { model.configure(window) }
+        }
+    }
+}
+
+struct MenuBarWindowConfigurator: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async { [weak view] in
+            if let window = view?.window {
+                MenuBarWindowPolicy.configure(window)
+            }
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async { [weak nsView] in
+            if let window = nsView?.window {
+                MenuBarWindowPolicy.configure(window)
+            }
         }
     }
 }
