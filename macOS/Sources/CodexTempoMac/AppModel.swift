@@ -4,6 +4,8 @@ import Foundation
 
 @MainActor
 final class AppModel: ObservableObject {
+    static let shared = AppModel()
+
     @Published private(set) var snapshot: UsageSnapshot?
     @Published private(set) var advice: PaceAdvice
     @Published private(set) var syncLabel: String
@@ -19,6 +21,8 @@ final class AppModel: ObservableObject {
     private let snapshotStore: SnapshotStore
     private let launchAtLogin: LaunchAtLoginController
     private var pollingTask: Task<Void, Never>?
+    private weak var panelWindow: NSWindow?
+    private lazy var closeHandler = TempoPanelCloseHandler(model: self)
 
     init(
         provider: CodexUsageProvider = CodexUsageProvider(),
@@ -57,15 +61,23 @@ final class AppModel: ObservableObject {
     }
 
     func showWindow() {
+        NSApp.setActivationPolicy(.regular)
+        guard let window = resolvedPanelWindow() else { return }
         NSApp.activate(ignoringOtherApps: true)
-        if let window = NSApp.windows.first(where: { $0.title == "Codex Tempo" }) ?? NSApp.windows.first {
-            window.makeKeyAndOrderFront(nil)
-            configure(window)
+        if window.isMiniaturized {
+            window.deminiaturize(nil)
         }
+        window.makeKeyAndOrderFront(nil)
+        configure(window)
     }
 
-    func hideWindow() {
-        NSApp.windows.filter { $0.title == "Codex Tempo" }.forEach { $0.orderOut(nil) }
+    func minimizeWindow() {
+        resolvedPanelWindow()?.miniaturize(nil)
+    }
+
+    func hideToMenuBar() {
+        resolvedPanelWindow()?.orderOut(nil)
+        NSApp.setActivationPolicy(.accessory)
     }
 
     func setLaunchAtLogin(_ enabled: Bool) {
@@ -82,11 +94,18 @@ final class AppModel: ObservableObject {
     }
 
     func configure(_ window: NSWindow) {
+        panelWindow = window
         window.title = "Codex Tempo"
-        window.level = isPinned ? .floating : .normal
+        window.identifier = NSUserInterfaceItemIdentifier("tempo")
+        window.styleMask.insert(.miniaturizable)
+        TempoPanelWindowPolicy.applyLevel(isPinned: isPinned, to: window)
         window.isMovableByWindowBackground = true
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         window.setFrameAutosaveName("CodexTempoCompactPremium")
+        if let closeButton = window.standardWindowButton(.closeButton) {
+            closeButton.target = closeHandler
+            closeButton.action = #selector(TempoPanelCloseHandler.hideToMenuBar(_:))
+        }
         window.standardWindowButton(.zoomButton)?.isHidden = true
         window.standardWindowButton(.miniaturizeButton)?.isHidden = true
     }
@@ -138,6 +157,29 @@ final class AppModel: ObservableObject {
     }
 
     private func applyWindowLevel() {
-        NSApp.windows.forEach { $0.level = isPinned ? .floating : .normal }
+        guard let window = resolvedPanelWindow() else { return }
+        TempoPanelWindowPolicy.applyLevel(isPinned: isPinned, to: window)
+    }
+
+    private func resolvedPanelWindow() -> NSWindow? {
+        if let panelWindow { return panelWindow }
+        let window = NSApp.windows.first {
+            $0.identifier?.rawValue == "tempo" || $0.title == "Codex Tempo"
+        }
+        panelWindow = window
+        return window
+    }
+}
+
+@MainActor
+private final class TempoPanelCloseHandler: NSObject {
+    private weak var model: AppModel?
+
+    init(model: AppModel) {
+        self.model = model
+    }
+
+    @objc func hideToMenuBar(_ sender: Any?) {
+        model?.hideToMenuBar()
     }
 }

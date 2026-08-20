@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 
 enum SelfTests {
@@ -7,6 +8,8 @@ enum SelfTests {
         checkSnapshotStore(&failures)
         checkAppServerParser(&failures)
         checkStabilization(&failures)
+        await checkMenuBarWindowPolicy(&failures)
+        await checkTempoPanelWindowPolicy(&failures)
         await checkSessionReader(&failures)
 
         if failures.isEmpty {
@@ -113,6 +116,42 @@ enum SelfTests {
                 "stabilizer should accept a genuine reset", into: &failures)
         require(CodexUsageProvider.preserveAfterFailure(previous, now: now)?.source == CodexUsageProvider.cachedSourceName,
                 "active official data should survive a transient failure", into: &failures)
+    }
+
+    @MainActor
+    private static func checkMenuBarWindowPolicy(_ failures: inout [String]) {
+        let window = MenuBarWindowProbe()
+
+        MenuBarWindowPolicy.configure(window)
+
+        require(!window.hidesOnDeactivate,
+                "menu-bar window should remain visible while Screenshot is active", into: &failures)
+        require(window.sharingType == .readOnly,
+                "menu-bar window should be available to WindowServer capture", into: &failures)
+    }
+
+    @MainActor
+    private final class MenuBarWindowProbe: MenuBarWindowConfigurable {
+        var hidesOnDeactivate = true
+        var sharingType: NSWindow.SharingType = .none
+    }
+
+    @MainActor
+    private static func checkTempoPanelWindowPolicy(_ failures: inout [String]) {
+        let window = TempoPanelWindowProbe()
+
+        TempoPanelWindowPolicy.applyLevel(isPinned: true, to: window)
+        require(window.level == .floating,
+                "pinned main panel should float", into: &failures)
+
+        TempoPanelWindowPolicy.applyLevel(isPinned: false, to: window)
+        require(window.level == .normal,
+                "unpinned main panel should use normal level", into: &failures)
+    }
+
+    @MainActor
+    private final class TempoPanelWindowProbe: TempoPanelWindowLevelConfigurable {
+        var level: NSWindow.Level = .normal
     }
 
     private static func checkSessionReader(_ failures: inout [String]) async {

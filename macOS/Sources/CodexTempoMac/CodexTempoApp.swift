@@ -7,23 +7,29 @@ final class TempoAppDelegate: NSObject, NSApplicationDelegate {
         if CommandLine.arguments.contains("--dark-preview") {
             NSApp.appearance = NSAppearance(named: .darkAqua)
         }
-        NSApp.setActivationPolicy(.accessory)
+        NSApp.setActivationPolicy(.regular)
         if let iconURL = Bundle.main.url(forResource: "CodexTempo", withExtension: "icns"),
            let icon = NSImage(contentsOf: iconURL) {
             NSApp.applicationIconImage = icon
         } else {
             NSApp.applicationIconImage = NSImage(systemSymbolName: "leaf", accessibilityDescription: "Codex Tempo")
         }
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
     }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        AppModel.shared.showWindow()
+        return true
+    }
 }
 
 struct CodexTempoApp: App {
     @NSApplicationDelegateAdaptor(TempoAppDelegate.self) private var delegate
-    @StateObject private var model = AppModel()
+    @StateObject private var model = AppModel.shared
     private let previewColorScheme: ColorScheme? = CommandLine.arguments.contains("--dark-preview") ? .dark : nil
 
     var body: some Scene {
@@ -48,6 +54,11 @@ struct CodexTempoApp: App {
             }
         }
         .menuBarExtraStyle(.window)
+
+        Settings {
+            TempoSettingsView(model: model)
+                .preferredColorScheme(previewColorScheme)
+        }
     }
 }
 

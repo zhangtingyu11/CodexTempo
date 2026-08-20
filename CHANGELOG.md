@@ -1,5 +1,21 @@
 # 更新日志 / Changelog
 
+## Unreleased
+
+- macOS 主窗口显示时恢复 Dock 图标、应用菜单和“设置…”入口；关闭主窗口后隐藏到状态栏并继续后台运行。
+- 修复关闭窗口置顶后状态栏弹窗失去交互的问题，主窗口、状态栏与设置页现在共享同一状态。
+- 状态栏弹窗在系统截图期间保持可见并允许 WindowServer 捕获。
+- macOS 打包脚本支持当前架构构建和 Bundle ID 覆盖，同时保留官方默认应用身份。
+
+---
+
+## Unreleased (English)
+
+- Restores the Dock icon, application menu, and Settings entry while the macOS panel is visible; closing the panel now hides it to the menu bar without terminating the app.
+- Keeps pinning scoped to the main panel and shares settings state across the main window, menu-bar popover, and Settings window.
+- Keeps the menu-bar popover visible and capturable while the system screenshot UI is active.
+- Adds native-architecture builds and an optional bundle-identifier override while preserving the official default app identity.
+
 ## v1.1.0
 
 - 新增 macOS 通用 DMG，支持 Apple 芯片与 Intel Mac。
