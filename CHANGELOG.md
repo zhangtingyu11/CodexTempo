@@ -1,5 +1,14 @@
 # 更新日志 / Changelog
 
+## v1.1.1
+
+- Windows 保存最后一次官方额度，重启后先显示带时间的缓存，再自动实时查询；已过期额度不继续显示。
+- Windows 可在桌面应用未打开时查找本机 Codex 后台程序。
+- 右键小组件或托盘图标，可切换“开机启动”或立即刷新。
+- Windows now persists the last official quota across restarts, labels cached readings, and drops expired windows.
+- Discover the locally installed Codex backend without requiring the desktop app to be running.
+- Right-click the widget or tray icon to toggle launch at login or refresh immediately.
+
 ## v1.1.0
 
 - 新增 macOS 通用 DMG，支持 Apple 芯片与 Intel Mac。

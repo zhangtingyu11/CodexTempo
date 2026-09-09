@@ -1,21 +1,23 @@
-## v1.1.0
+## v1.1.1
 
-Codex Tempo 现在同时提供 Windows 与 macOS 版本。
+本次主要修复 Windows 开机后的额度恢复，并增加启动设置。
 
-- 新增可直接下载的 macOS 通用 DMG，同时支持 Apple 芯片和 Intel Mac。
-- Windows 与 macOS 统一为 Apple 灰、系统蓝、额度卡片和蓝色叶片图标。
-- Windows 新增跟随系统的浅色/深色模式，并记住上次完整窗口位置。
-- 两个平台统一从 GitHub 标签取得版本号，避免版本不一致。
-- 优化 macOS 今日用量基线，避免重复扫描大量 session 文件。
-- 保留 Windows 边缘吸附紧凑模式；macOS 保留原生菜单栏体验。
+- 保存最后一次官方额度，重启后先显示带时间的“上次记录”，再自动查询最新额度。
+- 改进本机 Codex 后台程序查找，支持桌面应用未打开时查询；需要已登录 Codex 且网络可用。
+- 右键小组件或托盘图标，可勾选/取消“开机启动”，也可点击“立即刷新”。
+- 过期额度不再继续显示，跨天后不沿用昨天的今日用量。
+- macOS 本次无功能变更，安装包版本同步为 1.1.1。
+
+Windows 用户下载 **CodexTempo-Setup-x64.exe** 安装即可。旧版本仍保留在 Releases 中。
 
 ---
 
-Codex Tempo is now available for both Windows and macOS.
+This release improves Windows startup quota recovery and adds launch-at-login controls.
 
-- Adds a universal macOS DMG for Apple silicon and Intel Macs.
-- Unifies both platforms around the Apple-gray, system-blue quota-card design and blue leaf icon.
-- Adds system-aware light/dark mode and remembered window placement on Windows.
-- Keeps Windows edge docking and the native macOS menu bar experience.
-- Uses one version number from the GitHub release tag across both platforms.
-- Caches the macOS daily baseline to avoid repeatedly scanning session files.
+- Restore the last official quota after a restart, clearly label its timestamp, then query fresh limits automatically.
+- Improve local Codex backend discovery so queries can run without opening the desktop app. An existing Codex login and network access are required.
+- Right-click the widget or tray icon to toggle launch at login or refresh immediately.
+- Drop expired quota windows and clear yesterday's daily-usage estimate after midnight.
+- No functional macOS changes; its package version is aligned to 1.1.1.
+
+On Windows, download and install **CodexTempo-Setup-x64.exe**. Previous releases remain available.

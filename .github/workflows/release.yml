@@ -42,6 +42,12 @@ jobs:
           -p:PublishReadyToRun=false
           -p:Version=${{ env.APP_VERSION }}
           -o .\artifacts\${{ matrix.runtime }}
+      - name: Test Windows x64
+        if: matrix.runtime == 'win-x64'
+        shell: pwsh
+        run: |
+          $test = Start-Process -FilePath ".\artifacts\win-x64\CodexTempo.exe" -ArgumentList "--self-test" -Wait -PassThru -WindowStyle Hidden
+          if ($test.ExitCode -ne 0) { throw "Self-test failed: $($test.ExitCode)" }
       - name: Package
         shell: pwsh
         run: Compress-Archive -Path ".\artifacts\${{ matrix.runtime }}\*" -DestinationPath ".\CodexTempo-${{ matrix.runtime }}.zip"

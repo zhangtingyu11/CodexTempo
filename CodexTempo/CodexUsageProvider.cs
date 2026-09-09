@@ -6,7 +6,8 @@ public sealed class CodexUsageProvider : IDisposable
 
     private readonly CodexAppServerClient _appServer = new();
     private readonly CodexUsageReader _sessionReader = new();
-    private UsageSnapshot? _lastOfficial;
+    private UsageSnapshot? _lastOfficial = UsageCache.Load();
+    public UsageSnapshot? StartupSnapshot => UsageCache.Active(_lastOfficial, DateTimeOffset.Now);
 
     public async Task<UsageSnapshot?> ReadLatestAsync(CancellationToken cancellationToken = default)
     {
@@ -23,6 +24,7 @@ public sealed class CodexUsageProvider : IDisposable
                 todayUsed = Math.Max(todayUsed ?? 0, _lastOfficial.TodayUsedPercent ?? 0);
 
             _lastOfficial = live with { TodayUsedPercent = todayUsed };
+            UsageCache.Save(_lastOfficial);
             return _lastOfficial;
         }
 
@@ -75,7 +77,7 @@ public sealed class CodexUsageProvider : IDisposable
         UsageSnapshot? previous,
         DateTimeOffset now) =>
         previous is not null && HasActiveWindow(previous, now)
-            ? previous with { SourceFile = CachedSourceName }
+            ? UsageCache.Active(previous, now)
             : null;
 
     public static bool RunSelfTest()

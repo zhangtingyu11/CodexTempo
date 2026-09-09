@@ -23,6 +23,7 @@ public sealed class CodexAppServerClient : IDisposable
     private bool _initialized;
     private long _nextRequestId;
     private bool _disposed;
+    private string? _resolvedExecutable;
 
     public async Task<UsageSnapshot?> ReadLatestAsync(CancellationToken cancellationToken = default)
     {
@@ -62,7 +63,8 @@ public sealed class CodexAppServerClient : IDisposable
             if (_initialized && _process is { HasExited: false }) return;
             StopProcess();
 
-            var executable = ResolveCodexExecutable();
+            var executable = File.Exists(_resolvedExecutable) ? _resolvedExecutable : ResolveCodexExecutable();
+            _resolvedExecutable = executable;
             if (executable is null)
                 throw new InvalidOperationException("Codex CLI was not found.");
 
@@ -256,6 +258,34 @@ public sealed class CodexAppServerClient : IDisposable
 
     private static string? ResolveCodexExecutable()
     {
+        var configured = Environment.GetEnvironmentVariable("CODEX_EXECUTABLE");
+        if (!string.IsNullOrWhiteSpace(configured) && File.Exists(configured)) return configured;
+        // Installed CLI locations are available even before the desktop app is opened.
+        var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        var profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        foreach (var root in new[] {
+            Path.Combine(local, "OpenAI", "Codex", "bin"),
+            Path.Combine(local, "Programs", "Codex"),
+            Path.Combine(profile, ".codex", "packages", "standalone", "current", "bin"),
+            Path.Combine(profile, ".local", "bin")
+        })
+        {
+            try
+            {
+                if (!Directory.Exists(root)) continue;
+                var direct = Path.Combine(root, "codex.exe");
+                // In desktop installations only resources/codex.exe is the CLI.
+                var bundled = Path.Combine(root, "resources", "codex.exe");
+                if (File.Exists(bundled)) return bundled;
+                if (!root.EndsWith(Path.Combine("Programs", "Codex"), StringComparison.OrdinalIgnoreCase) && File.Exists(direct)) return direct;
+                foreach (var child in new DirectoryInfo(root).EnumerateDirectories().OrderByDescending(d => d.LastWriteTimeUtc))
+                {
+                    var binary = Path.Combine(child.FullName, "codex.exe");
+                    if (File.Exists(binary)) return binary;
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        }
         var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
         var architecture = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture
             == System.Runtime.InteropServices.Architecture.Arm64

@@ -69,6 +69,12 @@ public partial class MainWindow : Window
                 ? true
                 : null);
         _trayIcon = previewMode ? new Forms.NotifyIcon() : CreateTrayIcon();
+        if (!previewMode)
+            MouseRightButtonUp += (_, e) =>
+            {
+                _trayIcon.ContextMenuStrip?.Show(Forms.Cursor.Position);
+                e.Handled = true;
+            };
         if (!previewMode) RestorePosition();
         _positionSaveTimer = new DispatcherTimer(DispatcherPriority.Background)
         {
@@ -96,6 +102,7 @@ public partial class MainWindow : Window
         {
             Loaded += async (_, _) =>
             {
+                if (_reader.StartupSnapshot is { } cached) DisplaySnapshot(cached);
                 await RefreshAsync();
                 _timer.Start();
             };
@@ -132,6 +139,21 @@ public partial class MainWindow : Window
                 return;
             }
 
+            DisplaySnapshot(snapshot);
+        }
+        catch
+        {
+            SyncLabel.Text = "暂时无法读取 · 将自动重试";
+            StatusDot.Fill = Brush("#FF3B30");
+        }
+        finally
+        {
+            _refreshing = false;
+        }
+    }
+
+    private void DisplaySnapshot(UsageSnapshot snapshot)
+    {
             var now = DateTimeOffset.Now;
             var advice = RecommendationEngine.Recommend(snapshot, now);
             AdviceTitle.Text = advice.Title;
@@ -151,21 +173,11 @@ public partial class MainWindow : Window
             SyncLabel.Text = isLive
                 ? $"实时查询 · {snapshot.CapturedAt.ToLocalTime():HH:mm:ss}"
                 : isCachedLive
-                ? $"连接波动 · 保留 {snapshot.CapturedAt.ToLocalTime():HH:mm:ss}"
+                ? $"上次记录 · {snapshot.CapturedAt.ToLocalTime():MM-dd HH:mm}"
                 : fresh
                 ? $"额度更新 · {snapshot.CapturedAt.ToLocalTime():HH:mm:ss}"
                 : $"最后额度 · {snapshot.CapturedAt.ToLocalTime():MM-dd HH:mm}";
             FooterLabel.Text = "每 10 秒查询实时额度";
-        }
-        catch
-        {
-            SyncLabel.Text = "暂时无法读取 · 将自动重试";
-            StatusDot.Fill = Brush("#FF3B30");
-        }
-        finally
-        {
-            _refreshing = false;
-        }
     }
 
     private static void UpdateLimit(
@@ -211,11 +223,13 @@ public partial class MainWindow : Window
 
     private void ShowUnavailable()
     {
-        AdviceTitle.Text = "等待首次额度快照";
-        AdviceDetail.Text = "在 Codex 中发一条消息，小组件就会自动更新";
+        AdviceTitle.Text = "暂时无法获取额度";
+        AdviceDetail.Text = "请确认已登录 Codex 且网络可用，将自动重试";
         RateLabel.Text = "本地待命";
         ApplyTone(PaceTone.Waiting);
-        SyncLabel.Text = "未找到最近的 session 数据";
+        SyncLabel.Text = "等待额度 · 每 10 秒重试";
+        UpdateLimit(null, FivePercent, FiveProgress, FiveReset, DateTimeOffset.Now);
+        UpdateLimit(null, WeekPercent, WeekProgress, WeekReset, DateTimeOffset.Now);
         StatusDot.Fill = Brush(_isDark ? "#77777E" : "#8E8E93");
     }
 
@@ -303,6 +317,19 @@ public partial class MainWindow : Window
     private Forms.NotifyIcon CreateTrayIcon()
     {
         var menu = new Forms.ContextMenuStrip();
+        var startup = new Forms.ToolStripMenuItem("开机启动");
+        menu.Opening += (_, _) =>
+        {
+            try { startup.Checked = StartupSettings.Enabled; startup.Enabled = true; }
+            catch { startup.Enabled = false; }
+        };
+        startup.Click += (_, _) =>
+        {
+            try { StartupSettings.SetEnabled(!StartupSettings.Enabled); startup.Checked = StartupSettings.Enabled; }
+            catch (Exception ex) { System.Windows.MessageBox.Show("无法更改开机启动设置：" + ex.Message, "Codex Tempo"); }
+        };
+        menu.Items.Add(startup);
+        menu.Items.Add("立即刷新", null, async (_, _) => await RefreshAsync());
         menu.Items.Add("显示完整面板", null, (_, _) => ShowFromTray());
         menu.Items.Add("切换置顶", null, (_, _) =>
         {

@@ -71,6 +71,7 @@ public partial class App : System.Windows.Application
                 RecommendationEngine.RunSelfTest() &&
                 CodexAppServerClient.RunSelfTest() &&
                 CodexUsageProvider.RunSelfTest() &&
+                UsageCache.RunSelfTest() &&
                 CodexUsageReader.RunSelfTest() &&
                 CodexTempo.MainWindow.RunDockingSelfTest()
                     ? 0
