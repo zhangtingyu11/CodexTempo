@@ -15,24 +15,36 @@ struct LimitWindow: Codable, Equatable, Sendable {
 }
 
 struct UsageSnapshot: Codable, Equatable, Sendable {
-    let fiveHour: LimitWindow?
-    let week: LimitWindow?
-    let capturedAt: Date
-    let source: String
-    let todayUsedPercent: Double?
+    var fiveHour: LimitWindow?
+    var week: LimitWindow?
+    var capturedAt: Date
+    var source: String
+    var todayUsedPercent: Double?
+    var accountKey: String?
+    var contextStamp: String?
+    var dayStartUsed: Double?
+    var usageDay: Date?
 
     init(
         fiveHour: LimitWindow?,
         week: LimitWindow?,
         capturedAt: Date,
         source: String,
-        todayUsedPercent: Double? = nil
+        todayUsedPercent: Double? = nil,
+        accountKey: String? = nil,
+        contextStamp: String? = nil,
+        dayStartUsed: Double? = nil,
+        usageDay: Date? = nil
     ) {
         self.fiveHour = fiveHour
         self.week = week
         self.capturedAt = capturedAt
         self.source = source
         self.todayUsedPercent = todayUsedPercent
+        self.accountKey = accountKey
+        self.contextStamp = contextStamp
+        self.dayStartUsed = dayStartUsed
+        self.usageDay = usageDay
     }
 
     func replacing(

@@ -2,91 +2,58 @@ import Foundation
 
 actor CodexUsageProvider {
     static let cachedSourceName = "Codex App Server (cached)"
-
     private let appServer: CodexAppServerClient
-    private let sessionReader: CodexUsageReader
+    private let store: SnapshotStore
     private var lastOfficial: UsageSnapshot?
+    private var pendingLower: UsageSnapshot?
+    private var persisted: UsageSnapshot?
+    private var nextAttempt = Date.distantPast
+    private var failures = 0
 
-    init(
-        appServer: CodexAppServerClient = CodexAppServerClient(),
-        sessionReader: CodexUsageReader = CodexUsageReader()
-    ) {
+    init(appServer: CodexAppServerClient = CodexAppServerClient(), store: SnapshotStore = SnapshotStore()) {
         self.appServer = appServer
-        self.sessionReader = sessionReader
+        self.store = store
+        lastOfficial = store.load()
     }
-
+    func requestRefresh() { nextAttempt = .distantPast }
     func readLatest() async -> UsageSnapshot? {
-        if let official = await appServer.readLatest() {
-            let now = Date()
-            let stabilized = Self.stabilize(official, previous: lastOfficial, now: now)
-            var todayUsed = await stabilized.week.asyncFlatMap { await sessionReader.estimateTodayUsed(for: $0) }
-            if let previous = lastOfficial,
-               Calendar.current.isDate(previous.capturedAt, inSameDayAs: now),
-               Self.sameWindow(stabilized.week, previous.week) {
-                todayUsed = max(todayUsed ?? 0, previous.todayUsedPercent ?? 0)
-            }
-            let result = UsageSnapshot(
-                fiveHour: stabilized.fiveHour,
-                week: stabilized.week,
-                capturedAt: stabilized.capturedAt,
-                source: stabilized.source,
-                todayUsedPercent: todayUsed
-            )
-            lastOfficial = result
-            return result
+        let now = Date()
+        if now < nextAttempt { return await verifiedCache(now) }
+        guard let live = await appServer.readLatest() else {
+            pendingLower = nil
+            failures = min(failures + 1, 5)
+            nextAttempt = now.addingTimeInterval(min(120, 10 * pow(2, Double(failures - 1))))
+            return await verifiedCache(now)
         }
-
-        if let preserved = Self.preserveAfterFailure(lastOfficial, now: Date()) {
-            return preserved
+        failures = 0
+        nextAttempt = now.addingTimeInterval(10)
+        if let previous = lastOfficial, !UsageLogic.sameAccount(live, previous) { lastOfficial = nil }
+        if let previous = lastOfficial, UsageLogic.drops(live, previous) {
+            let confirmed = pendingLower.map { UsageLogic.sameAccount(live, $0)
+                && Self.confirm(live.week, $0.week) && Self.confirm(live.fiveHour, $0.fiveHour) } ?? false
+            pendingLower = live
+            if !confirmed { return UsageLogic.active(previous, now: now) }
         }
-        return await sessionReader.readLatest()
+        pendingLower = nil
+        let result = UsageLogic.trackDay(live, lastOfficial)
+        lastOfficial = result
+        var comparable = result
+        comparable.capturedAt = persisted?.capturedAt ?? result.capturedAt
+        if persisted == nil || comparable != persisted || result.capturedAt.timeIntervalSince(persisted!.capturedAt) >= 60 {
+            store.save(result)
+            persisted = result
+        }
+        return result
     }
-
-    func shutdown() async {
-        await appServer.shutdown()
+    private static func confirm(_ a: LimitWindow?, _ b: LimitWindow?) -> Bool {
+        if a == nil && b == nil { return true }
+        return UsageLogic.sameWindow(a,b) && a!.usedPercent >= b!.usedPercent
     }
-
-    static func stabilize(_ current: UsageSnapshot, previous: UsageSnapshot?, now: Date) -> UsageSnapshot {
-        guard let previous else { return current }
-        return UsageSnapshot(
-            fiveHour: stabilizeWindow(current.fiveHour, previous: previous.fiveHour, now: now),
-            week: stabilizeWindow(current.week, previous: previous.week, now: now),
-            capturedAt: current.capturedAt,
-            source: current.source,
-            todayUsedPercent: current.todayUsedPercent
-        )
+    private func verifiedCache(_ now: Date) async -> UsageSnapshot? {
+        guard let old = lastOfficial, let key = old.accountKey,
+              key == (await appServer.accountKey), old.contextStamp == AccountContext.stamp() else { return nil }
+        return UsageLogic.active(old, now: now)
     }
-
-    static func preserveAfterFailure(_ previous: UsageSnapshot?, now: Date) -> UsageSnapshot? {
-        guard let previous,
-              previous.fiveHour?.resetsAt ?? .distantPast > now ||
-                previous.week?.resetsAt ?? .distantPast > now else { return nil }
-        return UsageSnapshot(
-            fiveHour: previous.fiveHour,
-            week: previous.week,
-            capturedAt: previous.capturedAt,
-            source: cachedSourceName,
-            todayUsedPercent: previous.todayUsedPercent
-        )
-    }
-
-    private static func stabilizeWindow(_ current: LimitWindow?, previous: LimitWindow?, now: Date) -> LimitWindow? {
-        guard let previous else { return current }
-        guard let current else { return previous.resetsAt > now ? previous : nil }
-        guard sameWindow(current, previous) else { return current }
-        return current.usedPercent < previous.usedPercent ? previous : current
-    }
-
-    private static func sameWindow(_ left: LimitWindow?, _ right: LimitWindow?) -> Bool {
-        guard let left, let right,
-              left.windowMinutes == right.windowMinutes else { return false }
-        return abs(left.resetsAt.timeIntervalSince(right.resetsAt)) <= 90
-    }
-}
-
-private extension Optional {
-    func asyncFlatMap<T>(_ transform: (Wrapped) async -> T?) async -> T? {
-        guard let value = self else { return nil }
-        return await transform(value)
-    }
+    func shutdown() async { await appServer.shutdown() }
+    static func preserveAfterFailure(_ previous: UsageSnapshot?, now: Date) -> UsageSnapshot? { UsageLogic.active(previous, now: now) }
 }

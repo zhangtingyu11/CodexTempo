@@ -8,6 +8,8 @@ namespace CodexTempo;
 
 public partial class App : System.Windows.Application
 {
+    private SingleInstance? _instance;
+    protected override void OnExit(ExitEventArgs e) { _instance?.Dispose(); base.OnExit(e); }
     protected override void OnStartup(StartupEventArgs e)
     {
         var monitorIndex = Array.FindIndex(e.Args, x =>
@@ -123,7 +125,10 @@ public partial class App : System.Windows.Application
             return;
         }
 
+        _instance = new SingleInstance();
+        if (!_instance.IsFirst) { Shutdown(); return; }
         MainWindow = new MainWindow();
+        _instance.Listen(Dispatcher, () => ((MainWindow)MainWindow).ShowFromTray());
         MainWindow.Show();
     }
 }

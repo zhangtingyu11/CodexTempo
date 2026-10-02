@@ -31,14 +31,14 @@ enum RecommendationEngine {
         }
 
         rate = min(max(rate, 0.15), 2.5)
-        let perDay = min(week.remainingPercent, neededHourlyBurn * 24)
-        let todayUsed = max(0, snapshot.todayUsedPercent ?? 0)
-        let remainingToday = max(0, perDay - todayUsed)
+        let midnight = Calendar.current.date(byAdding: .day, value: 1, to: Calendar.current.startOfDay(for: now))!
+        let remainingToday = min(week.remainingPercent, neededHourlyBurn * max(0, min(hoursLeft, midnight.timeIntervalSince(now) / 3_600)))
+        let perDay = (snapshot.todayUsedPercent ?? 0) + remainingToday
         let detail: String
-        if todayUsed <= perDay {
-            detail = "今日约 \(number(todayUsed))% / 目标 \(number(perDay))% · 还可用 \(number(remainingToday))% · 本周 \(number(week.usedPercent))%"
+        if let todayUsed = snapshot.todayUsedPercent {
+            detail = "今日约 \(number(todayUsed))% / 目标 \(number(perDay))% · 还可安排 \(number(remainingToday))%"
         } else {
-            detail = "今日约 \(number(todayUsed))% · 已超目标 \(number(todayUsed - perDay))% · 本周 \(number(week.usedPercent))%"
+            detail = "今日已用暂无法估算 · 今日还可安排约 \(number(remainingToday))%"
         }
 
         if rate < 0.5 {

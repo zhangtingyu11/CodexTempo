@@ -10,14 +10,28 @@ actor CodexAppServerClient {
     private var outputBuffer = Data()
     private var nextRequestID = 0
     private var initialized = false
+    private(set) var accountKey: String?
+    private var contextStamp: String?
+    private var generation = UUID()
 
     func readLatest() async -> UsageSnapshot? {
-        guard await ensureStarted(),
-              let response = await sendRequest(method: "account/rateLimits/read") else {
+        let stamp = AccountContext.stamp()
+        if contextStamp != stamp { stop(); accountKey = nil; contextStamp = stamp }
+        guard await ensureStarted() else { return nil }
+        accountKey = nil
+        guard let account = await sendRequest(method: "account/read", parameters: ["refreshToken": false]),
+              let key = Self.parseAccountKey(account) else { return nil }
+        accountKey = key
+        guard let response = await sendRequest(method: "account/rateLimits/read") else {
             stop()
             return nil
         }
-        return Self.parseResponse(response, capturedAt: Date())
+        guard stamp == AccountContext.stamp(), let check = await sendRequest(method: "account/read", parameters: ["refreshToken": false]),
+              Self.parseAccountKey(check) == key else { accountKey = nil; stop(); return nil }
+        guard var result = Self.parseResponse(response, capturedAt: Date()) else { return nil }
+        result.accountKey = key
+        result.contextStamp = stamp
+        return result
     }
 
     func shutdown() {
@@ -46,14 +60,16 @@ actor CodexAppServerClient {
         }
 
         self.process = process
+        let connection = UUID()
+        generation = connection
         input = stdinPipe.fileHandleForWriting
         outputTask = Task.detached(priority: .utility) { [weak self] in
             while !Task.isCancelled {
                 let data = stdoutPipe.fileHandleForReading.availableData
                 if data.isEmpty { break }
-                await self?.consume(data)
+                await self?.consume(data, connection: connection)
             }
-            await self?.connectionClosed()
+            await self?.connectionClosed(connection)
         }
         Task.detached(priority: .background) {
             while !Task.isCancelled, !stderrPipe.fileHandleForReading.availableData.isEmpty {}
@@ -115,12 +131,16 @@ actor CodexAppServerClient {
         }
     }
 
-    private func consume(_ data: Data) {
+    private func consume(_ data: Data, connection: UUID) {
+        guard generation == connection else { return }
         outputBuffer.append(data)
+        if outputBuffer.count > 2 * 1_024 * 1_024 { stop(); return }
         while let newline = outputBuffer.firstIndex(of: 0x0A) {
             let line = outputBuffer[..<newline]
             outputBuffer.removeSubrange(...newline)
-            guard let object = try? JSONSerialization.jsonObject(with: Data(line)) as? [String: Any],
+            guard let object = try? JSONSerialization.jsonObject(with: Data(line)) as? [String: Any] else { continue }
+            if object["method"] as? String == "account/updated" { accountKey = nil }
+            guard
                   let id = (object["id"] as? NSNumber)?.intValue,
                   let continuation = pending.removeValue(forKey: id) else { continue }
             continuation.resume(returning: object)
@@ -131,7 +151,8 @@ actor CodexAppServerClient {
         pending.removeValue(forKey: id)?.resume(returning: nil)
     }
 
-    private func connectionClosed() {
+    private func connectionClosed(_ connection: UUID) {
+        guard generation == connection else { return }
         initialized = false
         let continuations = pending.values
         pending.removeAll()
@@ -139,6 +160,7 @@ actor CodexAppServerClient {
     }
 
     private func stop() {
+        generation = UUID()
         initialized = false
         outputTask?.cancel()
         outputTask = nil
@@ -172,13 +194,23 @@ actor CodexAppServerClient {
             durationKey: "windowDurationMins",
             resetKey: "resetsAt"
         )
-        guard windows.five != nil || windows.week != nil else { return nil }
+        let five = windows.five.flatMap { $0.resetsAt > capturedAt ? $0 : nil }
+        let week = windows.week.flatMap { $0.resetsAt > capturedAt ? $0 : nil }
+        guard five != nil || week != nil else { return nil }
         return UsageSnapshot(
-            fiveHour: windows.five,
-            week: windows.week,
+            fiveHour: five,
+            week: week,
             capturedAt: capturedAt,
             source: sourceName
         )
+    }
+
+    private static func parseAccountKey(_ response: [String: Any]) -> String? {
+        guard let result = response["result"] as? [String: Any], let account = result["account"] as? [String: Any],
+              let identity = (account["id"] as? String) ?? (account["email"] as? String), !identity.isEmpty,
+              let data = try? JSONSerialization.data(withJSONObject: account, options: .sortedKeys),
+              let text = String(data: data, encoding: .utf8) else { return nil }
+        return AccountContext.hash(text)
     }
 
     private static func resolveExecutable(

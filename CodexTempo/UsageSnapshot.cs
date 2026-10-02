@@ -12,7 +12,11 @@ public sealed record UsageSnapshot(
     LimitWindow? Week,
     DateTimeOffset CapturedAt,
     string SourceFile,
-    double? TodayUsedPercent = null);
+    double? TodayUsedPercent = null,
+    string? AccountKey = null,
+    string? ContextStamp = null,
+    double? DayStartUsed = null,
+    DateOnly? UsageDay = null);
 
 public enum PaceTone { Calm, Encourage, Caution, Urgent, Waiting }
 

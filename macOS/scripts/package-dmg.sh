@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="${0:A:h}"
 PROJECT_DIR="${SCRIPT_DIR:h}"
 BUILD_DIR="$PROJECT_DIR/build"
-APP_VERSION="${1:-1.1.0}"
+APP_VERSION="${1:-1.1.2}"
 APP_DIR="$BUILD_DIR/CodexTempo.app"
 DMG_ROOT="$BUILD_DIR/dmg-root"
 DMG_PATH="$BUILD_DIR/CodexTempo-macOS-universal.dmg"

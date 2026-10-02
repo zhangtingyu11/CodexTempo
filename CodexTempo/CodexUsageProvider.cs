@@ -3,117 +3,61 @@ namespace CodexTempo;
 public sealed class CodexUsageProvider : IDisposable
 {
     public const string CachedSourceName = "Codex App Server (cached)";
-
     private readonly CodexAppServerClient _appServer = new();
-    private readonly CodexUsageReader _sessionReader = new();
     private UsageSnapshot? _lastOfficial = UsageCache.Load();
-    public UsageSnapshot? StartupSnapshot => UsageCache.Active(_lastOfficial, DateTimeOffset.Now);
+    private UsageSnapshot? _pendingLower;
+    private UsageSnapshot? _persisted;
+    private DateTimeOffset _nextAttempt;
+    private int _failures;
+    private bool _disposed;
+    // Verify account/read before showing a persisted value, including at startup.
+    public UsageSnapshot? StartupSnapshot => null;
+    public void RequestRefresh() => _nextAttempt = DateTimeOffset.MinValue;
 
     public async Task<UsageSnapshot?> ReadLatestAsync(CancellationToken cancellationToken = default)
     {
-        var live = await _appServer.ReadLatestAsync(cancellationToken);
-        if (live is not null)
-        {
-            live = StabilizeOfficial(live, _lastOfficial, DateTimeOffset.Now);
-            var todayUsed = live.Week is null
-                ? null
-                : await _sessionReader.EstimateTodayUsedForAsync(live.Week, cancellationToken);
-            if (_lastOfficial is not null &&
-                DateOnly.FromDateTime(_lastOfficial.CapturedAt.LocalDateTime) == DateOnly.FromDateTime(DateTime.Now) &&
-                SameWindow(live.Week, _lastOfficial.Week))
-                todayUsed = Math.Max(todayUsed ?? 0, _lastOfficial.TodayUsedPercent ?? 0);
-
-            _lastOfficial = live with { TodayUsedPercent = todayUsed };
-            UsageCache.Save(_lastOfficial);
-            return _lastOfficial;
-        }
-
+        if (_disposed) return null;
         var now = DateTimeOffset.Now;
-        var preserved = PreserveAfterFailure(_lastOfficial, now);
-        if (preserved is not null) return preserved;
-
-        return await _sessionReader.ReadLatestAsync(cancellationToken);
-    }
-
-    private static UsageSnapshot StabilizeOfficial(
-        UsageSnapshot current,
-        UsageSnapshot? previous,
-        DateTimeOffset now)
-    {
-        if (previous is null) return current;
-        return current with
+        if (now < _nextAttempt) return VerifiedCache(now);
+        var live = await _appServer.ReadLatestAsync(cancellationToken);
+        if (_disposed) return null;
+        if (live is null)
         {
-            FiveHour = StabilizeWindow(current.FiveHour, previous.FiveHour, now),
-            Week = StabilizeWindow(current.Week, previous.Week, now)
-        };
-    }
-
-    private static LimitWindow? StabilizeWindow(
-        LimitWindow? current,
-        LimitWindow? previous,
-        DateTimeOffset now)
-    {
-        if (previous is null) return current;
-        if (current is null)
-            return previous.ResetsAt > now ? previous : null;
-        if (!SameWindow(current, previous)) return current;
-
-        // Used percentage is monotonic inside one quota window. A lower value
-        // is a stale replica or fallback artifact, so retain the highest
-        // confirmed value until the reset timestamp actually changes.
-        return current.UsedPercent < previous.UsedPercent ? previous : current;
-    }
-
-    private static bool SameWindow(LimitWindow? left, LimitWindow? right) =>
-        left is not null &&
-        right is not null &&
-        left.WindowMinutes == right.WindowMinutes &&
-        Math.Abs((left.ResetsAt - right.ResetsAt).TotalSeconds) <= 90;
-
-    private static bool HasActiveWindow(UsageSnapshot snapshot, DateTimeOffset now) =>
-        snapshot.FiveHour?.ResetsAt > now || snapshot.Week?.ResetsAt > now;
-
-    private static UsageSnapshot? PreserveAfterFailure(
-        UsageSnapshot? previous,
-        DateTimeOffset now) =>
-        previous is not null && HasActiveWindow(previous, now)
-            ? UsageCache.Active(previous, now)
-            : null;
-
-    public static bool RunSelfTest()
-    {
-        var now = DateTimeOffset.Parse("2026-08-03T12:00:00+08:00");
-        var reset = now.AddDays(2);
-        var previous = new UsageSnapshot(
-            null,
-            new LimitWindow(38, 10080, reset),
-            now.AddSeconds(-10),
-            CodexAppServerClient.SourceName,
-            4);
-        var staleReplica = previous with
+            _pendingLower = null;
+            _failures = Math.Min(_failures + 1, 5);
+            _nextAttempt = now.AddSeconds(Math.Min(120, 10 * Math.Pow(2, _failures - 1)));
+            return VerifiedCache(now);
+        }
+        _failures = 0;
+        _nextAttempt = now.AddSeconds(10);
+        if (_lastOfficial is not null && !UsageLogic.SameAccount(live, _lastOfficial)) _lastOfficial = null;
+        if (_lastOfficial is not null && UsageLogic.Drops(live, _lastOfficial))
         {
-            Week = new LimitWindow(33, 10080, reset.AddSeconds(1)),
-            CapturedAt = now
-        };
-        var advanced = staleReplica with { Week = new LimitWindow(40, 10080, reset) };
-        var resetWindow = staleReplica with
-        {
-            Week = new LimitWindow(1, 10080, reset.AddDays(7))
-        };
-        var preserved = PreserveAfterFailure(previous, now);
-
-        return StabilizeOfficial(staleReplica, previous, now).Week?.UsedPercent == 38
-               && StabilizeOfficial(advanced, previous, now).Week?.UsedPercent == 40
-               && StabilizeOfficial(resetWindow, previous, now).Week?.UsedPercent == 1
-               && HasActiveWindow(previous, now)
-               && preserved?.SourceFile == CachedSourceName
-               && preserved.Week?.RemainingPercent == 62
-               && PreserveAfterFailure(previous, reset.AddSeconds(1)) is null;
+            // Hold only one poll, without assigning a fresh timestamp to old values.
+            // A second non-decreasing lower reading confirms an official correction.
+            var confirmed = _pendingLower is not null && UsageLogic.SameAccount(live, _pendingLower)
+                && ConfirmWindow(live.Week, _pendingLower.Week) && ConfirmWindow(live.FiveHour, _pendingLower.FiveHour);
+            _pendingLower = live;
+            if (!confirmed) return UsageCache.Active(_lastOfficial, now);
+        }
+        _pendingLower = null;
+        _lastOfficial = UsageLogic.TrackDay(live, _lastOfficial);
+        if (_persisted is null || _lastOfficial.CapturedAt - _persisted.CapturedAt >= TimeSpan.FromMinutes(1) ||
+            _lastOfficial with { CapturedAt = _persisted.CapturedAt } != _persisted)
+        { UsageCache.Save(_lastOfficial); _persisted = _lastOfficial; }
+        return _lastOfficial;
     }
 
-    public void Dispose()
-    {
-        _appServer.Dispose();
-        _sessionReader.Dispose();
-    }
+    private static bool ConfirmWindow(LimitWindow? a, LimitWindow? b) =>
+        a is null && b is null || UsageLogic.SameWindow(a,b) && a!.UsedPercent >= b!.UsedPercent;
+
+    private UsageSnapshot? VerifiedCache(DateTimeOffset now) => _lastOfficial is { } old &&
+        old.AccountKey is not null && old.AccountKey == _appServer.AccountKey &&
+        old.ContextStamp == AccountContext.Stamp() ? UsageCache.Active(old, now) : null;
+
+    public static bool RunSelfTest() => UsageLogic.RunSelfTest() &&
+        ConfirmWindow(new(40,10080,DateTimeOffset.UnixEpoch),new(39,10080,DateTimeOffset.UnixEpoch)) &&
+        !ConfirmWindow(new(38,10080,DateTimeOffset.UnixEpoch),new(39,10080,DateTimeOffset.UnixEpoch));
+
+    public void Dispose() { _disposed = true; _appServer.Dispose(); }
 }

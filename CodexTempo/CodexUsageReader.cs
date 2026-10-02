@@ -13,8 +13,8 @@ public sealed class CodexUsageReader : IDisposable
     private string? _latestCandidate;
     private DateOnly? _baselineDate;
     private long _baselineReset;
-    private double _baselineWeekUsed;
-    private sealed record CacheEntry(long FileLength, UsageSnapshot Snapshot);
+    private double? _baselineWeekUsed;
+    private sealed record CacheEntry(long FileLength, DateTime WriteTime, UsageSnapshot? Snapshot);
 
     public CodexUsageReader() : this(Path.Combine(CodexPathResolver.ResolveHome(), "sessions"))
     {
@@ -102,7 +102,7 @@ public sealed class CodexUsageReader : IDisposable
         if (currentWeek is null) return null;
         var today = DateOnly.FromDateTime(DateTime.Today);
         if (_baselineDate == today && _baselineReset == currentWeek.ResetsAt.ToUnixTimeSeconds())
-            return Math.Max(0, currentWeek.UsedPercent - _baselineWeekUsed);
+            return _baselineWeekUsed is { } known ? Math.Max(0, currentWeek.UsedPercent - known) : null;
 
         UsageSnapshot? baseline = null;
         var previousDay = DateTime.Today.AddDays(-1);
@@ -113,7 +113,7 @@ public sealed class CodexUsageReader : IDisposable
             foreach (var file in new DirectoryInfo(previousDir).EnumerateFiles("*.jsonl")
                          .OrderByDescending(f => f.LastWriteTimeUtc).Take(6))
             {
-                var snapshot = await ReadFileAsync(file.FullName, ct);
+                var snapshot = await ReadBeforeMidnightAsync(file.FullName, ct);
                 if (snapshot?.Week?.ResetsAt == currentWeek.ResetsAt &&
                     (baseline is null || snapshot.CapturedAt > baseline.CapturedAt))
                     baseline = snapshot;
@@ -129,7 +129,7 @@ public sealed class CodexUsageReader : IDisposable
                 foreach (var file in new DirectoryInfo(currentDir).EnumerateFiles("*.jsonl")
                              .OrderBy(f => f.CreationTimeUtc).Take(16))
                 {
-                    var snapshot = await ReadOldestFileSnapshotAsync(file.FullName, ct);
+                    var snapshot = await ReadBeforeMidnightAsync(file.FullName, ct);
                     if (snapshot?.Week?.ResetsAt == currentWeek.ResetsAt &&
                         (baseline is null || snapshot.CapturedAt < baseline.CapturedAt))
                         baseline = snapshot;
@@ -139,10 +139,28 @@ public sealed class CodexUsageReader : IDisposable
 
         _baselineDate = today;
         _baselineReset = currentWeek.ResetsAt.ToUnixTimeSeconds();
-        _baselineWeekUsed = baseline?.Week?.UsedPercent ?? currentWeek.UsedPercent;
-        return currentWeek.UsedPercent >= _baselineWeekUsed
-            ? currentWeek.UsedPercent - _baselineWeekUsed
-            : currentWeek.UsedPercent;
+        _baselineWeekUsed = baseline?.Week?.UsedPercent;
+        return _baselineWeekUsed is { } start && currentWeek.UsedPercent >= start
+            ? currentWeek.UsedPercent - start : null;
+    }
+
+    private static async Task<UsageSnapshot?> ReadBeforeMidnightAsync(string path, CancellationToken ct)
+    {
+        try
+        {
+            await using var stream = new FileStream(path,FileMode.Open,FileAccess.Read,FileShare.ReadWrite | FileShare.Delete,8192,FileOptions.Asynchronous);
+            const int limit = 512 * 1024;
+            var end = stream.Length;
+            var tail = await ReadRangeAsync(stream,Math.Max(0,end-limit),end,ct);
+            var head = end > limit ? await ReadRangeAsync(stream,0,Math.Min(end,limit),ct) : "";
+            var cutoff = new DateTimeOffset(DateTime.Today);
+            return (head + "\n" + tail).Split('\n',StringSplitOptions.RemoveEmptyEntries)
+                .Where(line => line.Contains("\"rate_limits\"",StringComparison.Ordinal))
+                .Select(line => ParseLine(line,path))
+                .Where(s => s is not null && s.CapturedAt <= cutoff && s.CapturedAt >= cutoff.AddDays(-1))
+                .MaxBy(s => s!.CapturedAt);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return null; }
     }
 
     internal Task<double?> EstimateTodayUsedForAsync(LimitWindow currentWeek, CancellationToken ct) =>
@@ -172,28 +190,30 @@ public sealed class CodexUsageReader : IDisposable
                 FileShare.ReadWrite | FileShare.Delete, 8192, FileOptions.Asynchronous | FileOptions.SequentialScan);
 
             CacheEntry? cached;
+            var end = stream.Length;
+            var writeTime = File.GetLastWriteTimeUtc(path);
             lock (_gate) _cache.TryGetValue(path, out cached);
-            if (cached is not null && cached.FileLength == stream.Length)
+            if (cached is not null && cached.FileLength == end && cached.WriteTime == writeTime)
                 return cached.Snapshot;
 
-            if (cached is not null && cached.FileLength <= stream.Length)
+            if (cached?.Snapshot is not null && cached.FileLength < end)
             {
                 // Read only data appended since the last pass, with a small overlap
                 // in case the previous pass ended while a JSONL line was mid-write.
-                var start = Math.Max(0, cached.FileLength - 8192);
-                var appended = await ReadRangeAsync(stream, start, stream.Length, ct);
+                var start = Math.Max(Math.Max(0, cached.FileLength - 8192), end - probeSize);
+                var appended = await ReadRangeAsync(stream, start, end, ct);
                 var newer = ParseNewest(appended, path);
                 var result = newer is not null && newer.CapturedAt >= cached.Snapshot.CapturedAt
                     ? newer : cached.Snapshot;
-                lock (_gate) _cache[path] = new(stream.Length, result);
+                Store(path, new(end,writeTime,result));
                 return result;
             }
 
             // First encounter: inspect a bounded tail, then a bounded head. Rate
             // snapshots normally appear in one of these regions. Never walk an
             // entire long transcript during widget startup.
-            var tailStart = Math.Max(0, stream.Length - probeSize);
-            var tail = await ReadRangeAsync(stream, tailStart, stream.Length, ct);
+            var tailStart = Math.Max(0, end - probeSize);
+            var tail = await ReadRangeAsync(stream, tailStart, end, ct);
             var snapshot = ParseNewest(tail, path);
             if (snapshot is null && tailStart > 0)
             {
@@ -201,11 +221,8 @@ public sealed class CodexUsageReader : IDisposable
                 var head = await ReadRangeAsync(stream, 0, headEnd, ct);
                 snapshot = ParseNewest(head, path);
             }
-            if (snapshot is not null)
-            {
-                lock (_gate) _cache[path] = new(stream.Length, snapshot);
-                return snapshot;
-            }
+            Store(path, new(end,writeTime,snapshot));
+            return snapshot;
         }
         catch (IOException) { }
         catch (UnauthorizedAccessException) { }
@@ -225,6 +242,15 @@ public sealed class CodexUsageReader : IDisposable
             read += count;
         }
         return Encoding.UTF8.GetString(buffer, 0, read);
+    }
+
+    private void Store(string path, CacheEntry entry)
+    {
+        lock (_gate)
+        {
+            if (_cache.Count >= 256 && !_cache.ContainsKey(path)) _cache.Remove(_cache.Keys.First());
+            _cache[path] = entry;
+        }
     }
 
     private static UsageSnapshot? ParseNewest(string text, string path)
@@ -294,8 +320,12 @@ public sealed class CodexUsageReader : IDisposable
                     !item.TryGetProperty("window_minutes", out var window) ||
                     !item.TryGetProperty("resets_at", out var reset)) continue;
 
-                var value = new LimitWindow(used.GetDouble(), window.GetInt32(),
-                    DateTimeOffset.FromUnixTimeSeconds(reset.GetInt64()));
+                if (used.ValueKind != JsonValueKind.Number || !used.TryGetDouble(out var percent) ||
+                    window.ValueKind != JsonValueKind.Number || !window.TryGetInt32(out var minutes) ||
+                    reset.ValueKind != JsonValueKind.Number || !reset.TryGetInt64(out var seconds) ||
+                    seconds < 0 || seconds > 253402300799) continue;
+                var value = new LimitWindow(percent, minutes, DateTimeOffset.FromUnixTimeSeconds(seconds));
+                if (!double.IsFinite(value.UsedPercent) || value.UsedPercent < 0 || value.UsedPercent > 100) continue;
                 if (value.WindowMinutes is >= 270 and <= 330) five = value;
                 else if (value.WindowMinutes is >= 9000 and <= 11000) week = value;
             }
@@ -306,7 +336,7 @@ public sealed class CodexUsageReader : IDisposable
                 ? parsed : new FileInfo(path).LastWriteTimeUtc;
             return new UsageSnapshot(five, week, captured, path);
         }
-        catch (JsonException) { return null; }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException or FormatException or ArgumentOutOfRangeException or OverflowException) { return null; }
     }
 
     public static bool RunSelfTest()
@@ -327,6 +357,7 @@ public sealed class CodexUsageReader : IDisposable
         var rejected = ParseLine(modelSpecific, "model-specific.jsonl");
         return accepted?.Week?.UsedPercent == 31
                && rejected is null
+               && ParseLine("{\"payload\":{\"rate_limits\":{\"primary\":{\"used_percent\":null,\"window_minutes\":10080,\"resets_at\":1800000000}}}}", "bad.jsonl") is null
                && RunRefreshSelfTestCode() == 0;
     }
 
@@ -364,7 +395,13 @@ public sealed class CodexUsageReader : IDisposable
             await File.AppendAllTextAsync(canonical,
                 Environment.NewLine + BuildTestLine(24, reset, "2026-07-30T14:41:28Z"));
             var second = await reader.ReadLatestAsync();
-            return second?.Week?.UsedPercent == 24 ? 0 : 2;
+            if (second?.Week?.UsedPercent != 24) return 2;
+            var crossed = Path.Combine(folder, "cross-midnight.jsonl");
+            var midnight = new DateTimeOffset(DateTime.Today);
+            await File.WriteAllTextAsync(crossed,
+                BuildTestLine(30, reset, midnight.AddMinutes(-1).ToString("o")) + "\n" +
+                BuildTestLine(37, reset, midnight.AddMinutes(1).ToString("o")));
+            return (await ReadBeforeMidnightAsync(crossed, CancellationToken.None))?.Week?.UsedPercent == 30 ? 0 : 3;
         }
         finally
         {

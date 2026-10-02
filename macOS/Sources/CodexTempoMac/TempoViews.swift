@@ -333,7 +333,7 @@ struct MenuPopoverView: View {
                 }
                 .buttonStyle(.bordered)
                 Spacer()
-                Button("退出") { NSApp.terminate(nil) }
+                Button("退出") { model.quit() }
                     .buttonStyle(.plain)
             }
         }

@@ -59,6 +59,14 @@ enum SelfTests {
                 "encouraging recommendation should stay positive", into: &failures)
         require(RecommendationEngine.formatDuration(90 * 60) == "1小时30分",
                 "duration formatter should preserve hours and minutes", into: &failures)
+        let late = Calendar.current.startOfDay(for: now).addingTimeInterval(23 * 3_600)
+        let lateSnapshot = UsageSnapshot(fiveHour: nil,
+            week: LimitWindow(usedPercent: 30, windowMinutes: 10_080, resetsAt: late.addingTimeInterval(7 * 86_400)),
+            capturedAt: late, source: "test")
+        require(abs(RecommendationEngine.recommend(snapshot: lateSnapshot, now: late).dailyBudgetPercent - 70.0 / 168) < 0.001,
+                "daily budget ends at local midnight", into: &failures)
+        require(RecommendationEngine.recommend(snapshot: lateSnapshot, now: late).detail.contains("暂无法估算"),
+                "unknown daily usage is not zero", into: &failures)
     }
 
     private static func checkAppServerParser(_ failures: inout [String]) {
@@ -77,6 +85,9 @@ enum SelfTests {
         let parsed = CodexAppServerClient.parseResponse(response, capturedAt: .distantPast)
         require(parsed?.week?.usedPercent == 38,
                 "App Server parser should select the canonical codex bucket", into: &failures)
+        let malformed: [String: Any] = ["primary": ["used_percent": NSNull(), "window_minutes": 10_080, "resets_at": 1_800_000_000]]
+        require(CodexUsageReader.parseWindows(malformed, usedKey: "used_percent", durationKey: "window_minutes", resetKey: "resets_at").week == nil,
+                "invalid numeric fields should be ignored", into: &failures)
     }
 
     private static func checkSnapshotStore(_ failures: inout [String]) {
@@ -96,7 +107,10 @@ enum SelfTests {
         )
         let store = SnapshotStore(defaults: defaults, now: { now })
         store.save(expected)
-        require(store.load() == expected, "snapshot cache should round-trip exactly", into: &failures)
+        require(store.load()?.week == expected.week && store.load()?.source == CodexUsageProvider.cachedSourceName,
+                "snapshot cache should preserve values and mark them cached", into: &failures)
+        let partlyExpired = SnapshotStore(defaults: defaults, now: { now.addingTimeInterval(10_000) }).load()
+        require(partlyExpired?.fiveHour == nil && partlyExpired?.week != nil, "expire each quota independently", into: &failures)
         let expiredStore = SnapshotStore(defaults: defaults, now: { now.addingTimeInterval(500_000) })
         require(expiredStore.load() == nil, "snapshot cache should reject expired windows", into: &failures)
     }
@@ -107,10 +121,20 @@ enum SelfTests {
         let previous = snapshot(used: 38, reset: reset, capturedAt: now.addingTimeInterval(-10))
         let stale = snapshot(used: 33, reset: reset.addingTimeInterval(1), capturedAt: now)
         let newWindow = snapshot(used: 1, reset: reset.addingTimeInterval(7 * 86_400), capturedAt: now)
-        require(CodexUsageProvider.stabilize(stale, previous: previous, now: now).week?.usedPercent == 38,
-                "stabilizer should reject a lower replica", into: &failures)
-        require(CodexUsageProvider.stabilize(newWindow, previous: previous, now: now).week?.usedPercent == 1,
-                "stabilizer should accept a genuine reset", into: &failures)
+        var scopedPrevious = previous
+        scopedPrevious.accountKey = "a"
+        var scopedStale = stale
+        scopedStale.accountKey = "a"
+        require(UsageLogic.drops(scopedStale, scopedPrevious), "detect lower replica", into: &failures)
+        require(!UsageLogic.drops(newWindow, scopedPrevious), "accept new window", into: &failures)
+        let midnight = Calendar.current.startOfDay(for: now)
+        scopedPrevious.capturedAt = midnight.addingTimeInterval(-60)
+        var today = scopedPrevious
+        today.capturedAt = midnight.addingTimeInterval(60)
+        today.week = LimitWindow(usedPercent: 45, windowMinutes: 10_080, resetsAt: reset)
+        require(UsageLogic.trackDay(today, scopedPrevious).todayUsedPercent == 7, "cross-midnight official baseline", into: &failures)
+        today.accountKey = "b"
+        require(UsageLogic.trackDay(today, scopedPrevious).todayUsedPercent == nil, "account isolation", into: &failures)
         require(CodexUsageProvider.preserveAfterFailure(previous, now: now)?.source == CodexUsageProvider.cachedSourceName,
                 "active official data should survive a transient failure", into: &failures)
     }

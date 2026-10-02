@@ -9,6 +9,12 @@ final class CodexUsageReader: @unchecked Sendable {
     private var baselineDay: Date?
     private var baselineReset: Date?
     private var baselineWeekUsed: Double?
+    private struct CachedFile {
+        let size: UInt64
+        let modified: Date
+        let snapshot: UsageSnapshot?
+    }
+    private var cache: [URL: CachedFile] = [:]
 
     init(
         sessionsRoot: URL = CodexPathResolver.resolveHome().appendingPathComponent("sessions", isDirectory: true),
@@ -43,7 +49,7 @@ final class CodexUsageReader: @unchecked Sendable {
         }
 
         guard let latest = newest else { return nil }
-        let todayUsed = week.map { estimateTodayUsed(currentWeek: $0.0, at: current) }
+        let todayUsed = week.flatMap { estimateTodayUsed(currentWeek: $0.0, at: current) }
         return UsageSnapshot(
             fiveHour: fiveHour?.0,
             week: week?.0,
@@ -57,7 +63,7 @@ final class CodexUsageReader: @unchecked Sendable {
         estimateTodayUsed(currentWeek: currentWeek, at: now())
     }
 
-    private func estimateTodayUsed(currentWeek: LimitWindow, at date: Date) -> Double {
+    private func estimateTodayUsed(currentWeek: LimitWindow, at date: Date) -> Double? {
         let currentDay = calendar.startOfDay(for: date)
         if let baselineDay, calendar.isDate(baselineDay, inSameDayAs: currentDay),
            let baselineReset, sameReset(baselineReset, currentWeek.resetsAt),
@@ -72,7 +78,7 @@ final class CodexUsageReader: @unchecked Sendable {
             for file in files(in: directory(for: previousDay))
                 .sorted(by: { modificationDate($0) > modificationDate($1) })
                 .prefix(16) {
-                guard let snapshot = readNewest(from: file),
+                guard let snapshot = readBeforeMidnight(from: file, cutoff: currentDay),
                       let week = snapshot.week,
                       sameReset(week.resetsAt, currentWeek.resetsAt) else { continue }
                 if baseline == nil || snapshot.capturedAt > baseline!.capturedAt {
@@ -85,7 +91,7 @@ final class CodexUsageReader: @unchecked Sendable {
             for file in files(in: directory(for: date))
                 .sorted(by: { modificationDate($0) < modificationDate($1) })
                 .prefix(32) {
-                guard let snapshot = readOldest(from: file),
+                guard let snapshot = readBeforeMidnight(from: file, cutoff: currentDay),
                       let week = snapshot.week,
                       sameReset(week.resetsAt, currentWeek.resetsAt) else { continue }
                 if baseline == nil || snapshot.capturedAt < baseline!.capturedAt {
@@ -94,7 +100,7 @@ final class CodexUsageReader: @unchecked Sendable {
             }
         }
 
-        let used = baseline?.week?.usedPercent ?? currentWeek.usedPercent
+        guard let used = baseline?.week?.usedPercent else { return nil }
         baselineDay = currentDay
         baselineReset = currentWeek.resetsAt
         baselineWeekUsed = used
@@ -133,6 +139,24 @@ final class CodexUsageReader: @unchecked Sendable {
     }
 
     private func readNewest(from url: URL) -> UsageSnapshot? {
+        let modified = modificationDate(url)
+        let size = (try? fileManager.attributesOfItem(atPath: url.path)[.size] as? NSNumber)?.uint64Value ?? 0
+        if let old = cache[url], old.size == size, old.modified == modified { return old.snapshot }
+        let snapshot = readUncachedNewest(from: url)
+        if cache.count >= 256, cache[url] == nil, let first = cache.keys.first { cache.removeValue(forKey: first) }
+        cache[url] = CachedFile(size: size, modified: modified, snapshot: snapshot)
+        return snapshot
+    }
+
+    private func readBeforeMidnight(from url: URL, cutoff: Date) -> UsageSnapshot? {
+        guard let data = boundedData(from: url) else { return nil }
+        return [data.head ?? Data(), data.tail].flatMap { $0.split(separator: 0x0A) }
+            .compactMap { Self.parseLine(Data($0), source: url.path, fallbackDate: modificationDate(url)) }
+            .filter { $0.capturedAt <= cutoff && $0.capturedAt >= cutoff.addingTimeInterval(-86_400) }
+            .max { $0.capturedAt < $1.capturedAt }
+    }
+
+    private func readUncachedNewest(from url: URL) -> UsageSnapshot? {
         guard let data = boundedData(from: url) else { return nil }
         for line in data.tail.split(separator: 0x0A).reversed() {
             if let parsed = Self.parseLine(Data(line), source: url.path, fallbackDate: modificationDate(url)) {
@@ -166,7 +190,7 @@ final class CodexUsageReader: @unchecked Sendable {
         guard let size = try? handle.seekToEnd() else { return nil }
         let tailStart = size > UInt64(probeSize) ? size - UInt64(probeSize) : 0
         try? handle.seek(toOffset: tailStart)
-        let tail = (try? handle.readToEnd()) ?? Data()
+        let tail = (try? handle.read(upToCount: probeSize)) ?? Data()
         guard tailStart > 0 else { return (tail, nil) }
         try? handle.seek(toOffset: 0)
         return (tail, (try? handle.read(upToCount: probeSize)) ?? Data())
@@ -223,7 +247,9 @@ final class CodexUsageReader: @unchecked Sendable {
             guard let item = limits[name] as? [String: Any],
                   let used = number(item[usedKey]),
                   let duration = number(item[durationKey]),
-                  let reset = number(item[resetKey]) else { continue }
+                  let reset = number(item[resetKey]),
+                  used.isFinite, (0...100).contains(used), duration.isFinite,
+                  (1...11_000).contains(duration), reset.isFinite, (0...253_402_300_799).contains(reset) else { continue }
             let window = LimitWindow(
                 usedPercent: used,
                 windowMinutes: Int(duration),

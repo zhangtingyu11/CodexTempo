@@ -29,12 +29,7 @@ final class AppModel: ObservableObject {
         self.snapshotStore = snapshotStore
         self.launchAtLogin = launchAtLogin
         launchAtLoginEnabled = launchAtLogin.isEnabled
-        if let cached = snapshotStore.load() {
-            snapshot = cached
-            advice = RecommendationEngine.recommend(snapshot: cached, now: Date())
-            syncLabel = "上次记录 · 正在更新"
-            isShowingStartupCache = true
-        } else {
+        do {
             snapshot = nil
             advice = PaceAdvice(
                 title: "正在读取额度",
@@ -53,7 +48,10 @@ final class AppModel: ObservableObject {
 
     func refresh() {
         guard !isRefreshing else { return }
-        Task { [weak self] in await self?.refreshNow() }
+        Task { [weak self] in
+            await self?.provider.requestRefresh()
+            await self?.refreshNow()
+        }
     }
 
     func showWindow() {
@@ -104,14 +102,11 @@ final class AppModel: ObservableObject {
         defer { isRefreshing = false }
 
         guard let value = await provider.readLatest() else {
-            if snapshot != nil {
-                syncLabel = "暂时无法更新 · 显示上次记录"
-                isShowingStartupCache = true
-                return
-            }
+            snapshot = nil
+            isShowingStartupCache = false
             advice = PaceAdvice(
-                title: "等待首次额度快照",
-                detail: "在 Codex 中发一条消息，小组件就会自动更新",
+                title: "暂时无法获取额度",
+                detail: "请确认已登录 Codex 且网络可用，将自动重试",
                 rateLabel: "本地待命",
                 rateMultiplier: 0,
                 dailyBudgetPercent: 0,
@@ -122,11 +117,10 @@ final class AppModel: ObservableObject {
         }
 
         snapshot = value
-        snapshotStore.save(value)
-        isShowingStartupCache = false
+        isShowingStartupCache = value.source != CodexAppServerClient.sourceName
         advice = RecommendationEngine.recommend(snapshot: value, now: Date())
         let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm:ss"
+        formatter.dateFormat = "MM-dd HH:mm:ss"
         let time = formatter.string(from: value.capturedAt)
         if value.source == CodexAppServerClient.sourceName {
             syncLabel = "实时查询 · \(time)"
@@ -139,5 +133,10 @@ final class AppModel: ObservableObject {
 
     private func applyWindowLevel() {
         NSApp.windows.forEach { $0.level = isPinned ? .floating : .normal }
+    }
+
+    func quit() {
+        pollingTask?.cancel()
+        Task { await provider.shutdown(); NSApp.terminate(nil) }
     }
 }

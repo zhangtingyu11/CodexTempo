@@ -145,6 +145,7 @@ public partial class MainWindow : Window
         {
             SyncLabel.Text = "暂时无法读取 · 将自动重试";
             StatusDot.Fill = Brush("#FF3B30");
+            WidgetShell.ToolTip = SyncLabel.Text;
         }
         finally
         {
@@ -158,7 +159,7 @@ public partial class MainWindow : Window
             var advice = RecommendationEngine.Recommend(snapshot, now);
             AdviceTitle.Text = advice.Title;
             AdviceDetail.Text = advice.Detail;
-            AdviceDetail.ToolTip = "今日已用量根据昨天最后一条额度快照与当前快照的差值估算；不是官方逐日账单。";
+            AdviceDetail.ToolTip = advice.Detail + "\n按本地自然日估算周额度百分点；每日基线来自同一账号的官方记录，不是逐日账单。5小时限制独立生效。";
             RateLabel.Text = advice.RateLabel;
             RatePill.ToolTip = BuildPaceTooltip(advice);
             ApplyTone(advice.Tone);
@@ -177,7 +178,8 @@ public partial class MainWindow : Window
                 : fresh
                 ? $"额度更新 · {snapshot.CapturedAt.ToLocalTime():HH:mm:ss}"
                 : $"最后额度 · {snapshot.CapturedAt.ToLocalTime():MM-dd HH:mm}";
-            FooterLabel.Text = "每 10 秒查询实时额度";
+            FooterLabel.Text = "正常每 10 秒刷新 · 失败自动退避";
+            WidgetShell.ToolTip = SyncLabel.Text + "\n右键可立即刷新；双击紧凑面板可展开";
     }
 
     private static void UpdateLimit(
@@ -227,7 +229,8 @@ public partial class MainWindow : Window
         AdviceDetail.Text = "请确认已登录 Codex 且网络可用，将自动重试";
         RateLabel.Text = "本地待命";
         ApplyTone(PaceTone.Waiting);
-        SyncLabel.Text = "等待额度 · 每 10 秒重试";
+        SyncLabel.Text = "等待额度 · 将自动重试";
+        WidgetShell.ToolTip = SyncLabel.Text;
         UpdateLimit(null, FivePercent, FiveProgress, FiveReset, DateTimeOffset.Now);
         UpdateLimit(null, WeekPercent, WeekProgress, WeekReset, DateTimeOffset.Now);
         StatusDot.Fill = Brush(_isDark ? "#77777E" : "#8E8E93");
@@ -329,7 +332,7 @@ public partial class MainWindow : Window
             catch (Exception ex) { System.Windows.MessageBox.Show("无法更改开机启动设置：" + ex.Message, "Codex Tempo"); }
         };
         menu.Items.Add(startup);
-        menu.Items.Add("立即刷新", null, async (_, _) => await RefreshAsync());
+        menu.Items.Add("立即刷新", null, async (_, _) => { _reader.RequestRefresh(); await RefreshAsync(); });
         menu.Items.Add("显示完整面板", null, (_, _) => ShowFromTray());
         menu.Items.Add("切换置顶", null, (_, _) =>
         {
@@ -490,15 +493,17 @@ public partial class MainWindow : Window
         Top = Math.Max(area.Top, area.Bottom - Height - 24 - instanceOffset);
     }
 
-    private static bool IsVisiblePosition(double left, double top)
+    private bool IsVisiblePosition(double left, double top)
     {
         const double visibleEdge = 48;
-        var virtualLeft = SystemParameters.VirtualScreenLeft;
-        var virtualTop = SystemParameters.VirtualScreenTop;
-        var virtualRight = virtualLeft + SystemParameters.VirtualScreenWidth;
-        var virtualBottom = virtualTop + SystemParameters.VirtualScreenHeight;
-        return left + visibleEdge >= virtualLeft && left <= virtualRight - visibleEdge &&
-               top + visibleEdge >= virtualTop && top <= virtualBottom - visibleEdge;
+        var dpi = VisualTreeHelper.GetDpi(this);
+        return Forms.Screen.AllScreens.Any(screen =>
+        {
+            var area = screen.WorkingArea;
+            var overlapX = Math.Min((left + FullWidth) * dpi.DpiScaleX, area.Right) - Math.Max(left * dpi.DpiScaleX, area.Left);
+            var overlapY = Math.Min((top + FullHeight) * dpi.DpiScaleY, area.Bottom) - Math.Max(top * dpi.DpiScaleY, area.Top);
+            return overlapX >= visibleEdge * dpi.DpiScaleX && overlapY >= visibleEdge * dpi.DpiScaleY;
+        });
     }
 
     private void OnUserPreferenceChanged(object sender, UserPreferenceChangedEventArgs e)
@@ -599,6 +604,7 @@ public partial class MainWindow : Window
     private void DockToEdge(DockEdge edge)
     {
         _isDocked = true;
+        CompactStatusDot.Visibility = Visibility.Visible;
         _dockEdge = edge;
         var isVertical = edge is DockEdge.Left or DockEdge.Right;
         HeaderRow.Height = new GridLength(0);
@@ -629,8 +635,8 @@ public partial class MainWindow : Window
         WeekPercent.VerticalAlignment = VerticalAlignment.Center;
         FivePercent.FontSize = 16;
         WeekPercent.FontSize = 16;
-        FivePercent.Foreground = (System.Windows.Media.Brush)FindResource("Ink");
-        WeekPercent.Foreground = (System.Windows.Media.Brush)FindResource("Ink");
+        FivePercent.SetResourceReference(TextBlock.ForegroundProperty, "Ink");
+        WeekPercent.SetResourceReference(TextBlock.ForegroundProperty, "Ink");
         FiveLimitHeader.Margin = new Thickness(0, 0, 0, 2);
         WeekLimitHeader.Margin = new Thickness(0, 0, 0, 2);
         FiveReset.Margin = new Thickness(0);
@@ -643,7 +649,7 @@ public partial class MainWindow : Window
         WidgetShell.Margin = new Thickness(0);
         WidgetShell.CornerRadius = new CornerRadius(12);
         LimitsPanel.Margin = new Thickness(10, 5, 10, 4);
-        WidgetShell.ToolTip = "拖离屏幕边缘或双击，恢复完整面板";
+        WidgetShell.ToolTip = SyncLabel.Text + "\n拖离屏幕边缘或双击，恢复完整面板";
 
         UpdateLayout();
         var geometry = GetWindowGeometry();
@@ -677,6 +683,7 @@ public partial class MainWindow : Window
 
         var previousEdge = _dockEdge;
         _isDocked = false;
+        CompactStatusDot.Visibility = Visibility.Collapsed;
         HeaderRow.Height = new GridLength(54);
         AdviceRow.Height = new GridLength(76);
         LimitsRow.Height = new GridLength(142);
@@ -714,8 +721,8 @@ public partial class MainWindow : Window
         WeekPercent.VerticalAlignment = VerticalAlignment.Bottom;
         FivePercent.FontSize = 33;
         WeekPercent.FontSize = 33;
-        FivePercent.Foreground = (System.Windows.Media.Brush)FindResource("Accent");
-        WeekPercent.Foreground = (System.Windows.Media.Brush)FindResource("Accent");
+        FivePercent.SetResourceReference(TextBlock.ForegroundProperty, "Accent");
+        WeekPercent.SetResourceReference(TextBlock.ForegroundProperty, "Accent");
         FiveLimitStack.VerticalAlignment = VerticalAlignment.Stretch;
         WeekLimitStack.VerticalAlignment = VerticalAlignment.Stretch;
         LimitsPanel.Margin = new Thickness(20, 8, 20, 0);
@@ -766,7 +773,7 @@ public partial class MainWindow : Window
 
     private void OnClosing(object? sender, CancelEventArgs e)
     {
-        if (!_allowClose)
+        if (!_allowClose && !_previewMode)
         {
             e.Cancel = true;
             Dispatcher.BeginInvoke((Action)PromptForCloseChoice);

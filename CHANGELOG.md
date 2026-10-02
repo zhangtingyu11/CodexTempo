@@ -1,5 +1,17 @@
 # 更新日志 / Changelog
 
+## v1.1.2（待发布 / Unreleased）
+
+- 两端按本地自然日分配剩余预算，未知今日量不再显示为零。
+- 正常刷新仅使用官方额度；每日基线按账号隔离并持久化，不再扫描聊天记录估算。
+- 低值连续确认后可纠正，缓存保留原时间；独立清除过期窗口并在失败时退避重试。
+- Windows 单实例唤回、紧凑失联状态点、多屏位置检查及吸附模式动态主题修复。
+- 两端诊断读取加入有界数据、无结果缓存及缓存数量上限；新增边界回归测试。
+- Use calendar-day budgets, account-scoped official observations, and explicit unknown daily usage.
+- Preserve cache timestamps, confirm lower readings, expire windows separately, and back off failed queries.
+- Add Windows single-instance activation and compact stale-state indicators; fix theme and monitor restoration.
+- Bound diagnostic transcript reads and caches, and expand regression tests.
+
 ## v1.1.1
 
 - Windows 保存最后一次官方额度，重启后先显示带时间的缓存，再自动实时查询；已过期额度不继续显示。

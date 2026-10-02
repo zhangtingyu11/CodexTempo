@@ -5,7 +5,7 @@ namespace CodexTempo;
 
 internal static class UsageCache
 {
-    private static string CachePath => Path.Combine(CodexPathResolver.ResolveHome(), "codextempo-usage.json");
+    private static string CachePath => Path.Combine(CodexPathResolver.ResolveHome(), "codextempo-usage-v2.json");
 
     public static UsageSnapshot? Load() => Load(CachePath, DateTimeOffset.Now);
 

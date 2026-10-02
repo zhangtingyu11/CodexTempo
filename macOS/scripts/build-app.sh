@@ -5,7 +5,7 @@ SCRIPT_DIR="${0:A:h}"
 PROJECT_DIR="${SCRIPT_DIR:h}"
 BUILD_DIR="$PROJECT_DIR/build"
 APP_DIR="$BUILD_DIR/CodexTempo.app"
-APP_VERSION="${1:-1.1.0}"
+APP_VERSION="${1:-1.1.2}"
 CACHE_DIR="$PROJECT_DIR/.build/local-cache"
 MODULE_CACHE_DIR="$PROJECT_DIR/.build/module-cache"
 

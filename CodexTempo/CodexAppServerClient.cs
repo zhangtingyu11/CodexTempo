@@ -24,6 +24,8 @@ public sealed class CodexAppServerClient : IDisposable
     private long _nextRequestId;
     private bool _disposed;
     private string? _resolvedExecutable;
+    private string? _contextStamp;
+    public string? AccountKey { get; private set; }
 
     public async Task<UsageSnapshot?> ReadLatestAsync(CancellationToken cancellationToken = default)
     {
@@ -31,11 +33,21 @@ public sealed class CodexAppServerClient : IDisposable
 
         try
         {
+            var stamp = AccountContext.Stamp();
+            if (_contextStamp != stamp) { StopProcess(); AccountKey = null; _contextStamp = stamp; }
             await EnsureStartedAsync(cancellationToken);
+            AccountKey = null;
+            var account = await SendRequestCoreAsync("account/read", cancellationToken, new { refreshToken = false });
+            AccountKey = ParseAccountKey(account);
+            if (AccountKey is null) return null;
             var response = await SendRequestCoreAsync(
                 "account/rateLimits/read",
                 cancellationToken);
-            return ParseResponse(response, DateTimeOffset.Now);
+            var check = await SendRequestCoreAsync("account/read", cancellationToken, new { refreshToken = false });
+            if (AccountKey is null || ParseAccountKey(check) != AccountKey || stamp != AccountContext.Stamp())
+            { AccountKey = null; StopProcess(); return null; }
+            return ParseResponse(response, DateTimeOffset.Now) is { } snapshot
+                ? snapshot with { AccountKey = AccountKey, ContextStamp = stamp } : null;
         }
         catch (Exception ex) when (ex is IOException
                                    or InvalidOperationException
@@ -47,6 +59,7 @@ public sealed class CodexAppServerClient : IDisposable
                                    or OperationCanceledException)
         {
             StopProcess();
+            _resolvedExecutable = null;
             if (ex is OperationCanceledException && cancellationToken.IsCancellationRequested)
                 throw;
             return null;
@@ -174,6 +187,8 @@ public sealed class CodexAppServerClient : IDisposable
                 {
                     using var document = JsonDocument.Parse(line);
                     var root = document.RootElement;
+                    if (root.TryGetProperty("method", out var method) && method.GetString() == "account/updated")
+                        AccountKey = null;
                     if (root.TryGetProperty("id", out var idElement) &&
                         idElement.TryGetInt64(out var id) &&
                         _pending.TryGetValue(id, out var completion))
@@ -187,12 +202,15 @@ public sealed class CodexAppServerClient : IDisposable
         }
         catch (Exception ex) when (ex is IOException or InvalidOperationException)
         {
-            FailPending(ex);
+            if (ReferenceEquals(_process, process)) FailPending(ex);
         }
         finally
         {
-            _initialized = false;
-            FailPending(new IOException("Codex App Server connection closed."));
+            if (ReferenceEquals(_process, process))
+            {
+                _initialized = false;
+                FailPending(new IOException("Codex App Server connection closed."));
+            }
         }
     }
 
@@ -217,6 +235,8 @@ public sealed class CodexAppServerClient : IDisposable
 
     private static UsageSnapshot? ParseResponse(JsonElement response, DateTimeOffset capturedAt)
     {
+        try
+        {
         if (!response.TryGetProperty("result", out var result)) return null;
 
         JsonElement limits;
@@ -243,10 +263,13 @@ public sealed class CodexAppServerClient : IDisposable
                 !item.TryGetProperty("resetsAt", out var reset))
                 continue;
 
-            var parsed = new LimitWindow(
-                used.GetDouble(),
-                window.GetInt32(),
-                DateTimeOffset.FromUnixTimeSeconds(reset.GetInt64()));
+            if (used.ValueKind != JsonValueKind.Number || !used.TryGetDouble(out var percent) ||
+                window.ValueKind != JsonValueKind.Number || !window.TryGetInt32(out var minutes) ||
+                reset.ValueKind != JsonValueKind.Number || !reset.TryGetInt64(out var seconds) ||
+                seconds < 0 || seconds > 253402300799) continue;
+            var parsed = new LimitWindow(percent, minutes, DateTimeOffset.FromUnixTimeSeconds(seconds));
+            if (!double.IsFinite(parsed.UsedPercent) || parsed.UsedPercent < 0 || parsed.UsedPercent > 100) continue;
+            if (parsed.ResetsAt <= capturedAt) continue;
             if (parsed.WindowMinutes is >= 270 and <= 330) five = parsed;
             else if (parsed.WindowMinutes is >= 9000 and <= 11000) week = parsed;
         }
@@ -254,6 +277,18 @@ public sealed class CodexAppServerClient : IDisposable
         return five is null && week is null
             ? null
             : new UsageSnapshot(five, week, capturedAt, SourceName);
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException or FormatException or ArgumentOutOfRangeException or OverflowException) { return null; }
+    }
+
+    private static string? ParseAccountKey(JsonElement response)
+    {
+        if (!response.TryGetProperty("result", out var result) ||
+            !result.TryGetProperty("account", out var account) || account.ValueKind != JsonValueKind.Object) return null;
+        // Persist a digest only, never email or authentication material.
+        var identity = account.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.String ? id.GetString() :
+            account.TryGetProperty("email", out var email) && email.ValueKind == JsonValueKind.String ? email.GetString() : null;
+        return string.IsNullOrWhiteSpace(identity) ? null : AccountContext.Hash(account.GetRawText());
     }
 
     private static string? ResolveCodexExecutable()
@@ -380,7 +415,6 @@ public sealed class CodexAppServerClient : IDisposable
         if (_disposed) return;
         _disposed = true;
         StopProcess();
-        _startGate.Dispose();
-        _writeGate.Dispose();
+        // In-flight async operations may still release these gates during shutdown.
     }
 }

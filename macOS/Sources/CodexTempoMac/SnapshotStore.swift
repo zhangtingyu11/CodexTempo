@@ -1,7 +1,7 @@
 import Foundation
 
 struct SnapshotStore {
-    private static let key = "codexTempo.lastSnapshot"
+    private static let key = "codexTempo.lastSnapshot.v2"
     private let defaults: UserDefaults
     private let now: () -> Date
 
@@ -25,7 +25,7 @@ struct SnapshotStore {
             defaults.removeObject(forKey: Self.key)
             return nil
         }
-        return snapshot
+        return UsageLogic.active(snapshot, now: current)
     }
 
     func save(_ snapshot: UsageSnapshot) {

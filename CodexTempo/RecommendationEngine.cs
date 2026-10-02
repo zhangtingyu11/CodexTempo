@@ -25,12 +25,14 @@ public static class RecommendationEngine
         }
 
         rate = Math.Clamp(rate, .15, 2.5);
-        var perDay = Math.Min(week.RemainingPercent, neededHourlyBurn * 24);
-        var todayUsed = Math.Max(0, snapshot.TodayUsedPercent ?? 0);
-        var remainingToday = Math.Max(0, perDay - todayUsed);
-        var detail = todayUsed <= perDay
-            ? $"今日约 {todayUsed:0.#}% / 目标 {perDay:0.#}% · 还可用 {remainingToday:0.#}% · 本周 {week.UsedPercent:0.#}%"
-            : $"今日约 {todayUsed:0.#}% · 已超目标 {todayUsed - perDay:0.#}% · 本周 {week.UsedPercent:0.#}%";
+        var midnight = new DateTimeOffset(now.LocalDateTime.Date.AddDays(1));
+        var remainingToday = Math.Min(week.RemainingPercent,
+            neededHourlyBurn * Math.Max(0, Math.Min(hoursLeft, (midnight - now).TotalHours)));
+        var perDay = (snapshot.TodayUsedPercent ?? 0) + remainingToday;
+        var detail = snapshot.TodayUsedPercent is { } todayUsed
+            ? $"今日约 {todayUsed:0.#}% / 目标 {perDay:0.#}% · 还可安排 {remainingToday:0.#}%"
+            : $"今日已用暂无法估算 · 今日还可安排约 {remainingToday:0.#}%";
+        if (snapshot.FiveHour?.RemainingPercent <= 8) detail += " · 5h 紧张，先休息";
 
         if (rate < .5)
             return new("建议休息一下", detail,
@@ -62,10 +64,14 @@ public static class RecommendationEngine
             new(50, 10080, now.AddHours(84)), now, "");
         var guarded = balanced with { FiveHour = new(94, 300, now.AddHours(2)) };
         var behind = balanced with { Week = new(10, 10080, now.AddHours(48)) };
+        var late = new DateTimeOffset(DateTime.Today.AddHours(23));
+        var lateSnapshot = new UsageSnapshot(null,new(30,10080,late.AddDays(7)),late,"test");
         return Recommend(balanced, now).Tone == PaceTone.Calm
-            && Recommend(balanced, now).Detail.Contains("今日约 0%")
+            && Recommend(balanced, now).Detail.Contains("暂无法估算")
             && Recommend(guarded, now).Tone == PaceTone.Urgent
             && Recommend(behind, now).Tone == PaceTone.Encourage
+            && Math.Abs(Recommend(lateSnapshot,late).DailyBudgetPercent - 70d / 168) < .001
+            && Math.Abs(Recommend(lateSnapshot with { TodayUsedPercent = 7 },late).DailyBudgetPercent - (7 + 70d / 168)) < .001
             && FormatDuration(TimeSpan.FromMinutes(90)) == "1小时30分";
     }
 }
