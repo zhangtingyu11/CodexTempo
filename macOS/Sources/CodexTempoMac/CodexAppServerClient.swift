@@ -13,6 +13,7 @@ actor CodexAppServerClient {
     private(set) var accountKey: String?
     private var contextStamp: String?
     private var generation = UUID()
+    private let anonymousScope = UUID().uuidString
 
     func readLatest() async -> UsageSnapshot? {
         let stamp = AccountContext.stamp()
@@ -20,14 +21,14 @@ actor CodexAppServerClient {
         guard await ensureStarted() else { return nil }
         accountKey = nil
         guard let account = await sendRequest(method: "account/read", parameters: ["refreshToken": false]),
-              let key = Self.parseAccountKey(account) else { return nil }
+              let key = parseAccountKey(account) else { return nil }
         accountKey = key
         guard let response = await sendRequest(method: "account/rateLimits/read") else {
             stop()
             return nil
         }
         guard stamp == AccountContext.stamp(), let check = await sendRequest(method: "account/read", parameters: ["refreshToken": false]),
-              Self.parseAccountKey(check) == key else { accountKey = nil; stop(); return nil }
+              parseAccountKey(check) == key else { accountKey = nil; stop(); return nil }
         guard var result = Self.parseResponse(response, capturedAt: Date()) else { return nil }
         result.accountKey = key
         result.contextStamp = stamp
@@ -205,12 +206,12 @@ actor CodexAppServerClient {
         )
     }
 
-    private static func parseAccountKey(_ response: [String: Any]) -> String? {
+    private func parseAccountKey(_ response: [String: Any]) -> String? {
         guard let result = response["result"] as? [String: Any], let account = result["account"] as? [String: Any],
-              let identity = (account["id"] as? String) ?? (account["email"] as? String), !identity.isEmpty,
               let data = try? JSONSerialization.data(withJSONObject: account, options: .sortedKeys),
               let text = String(data: data, encoding: .utf8) else { return nil }
-        return AccountContext.hash(text)
+        let identity = (account["id"] as? String) ?? (account["email"] as? String) ?? ""
+        return AccountContext.hash(CodexPathResolver.resolveHome().path + "|" + text + (identity.isEmpty ? anonymousScope : ""))
     }
 
     private static func resolveExecutable(

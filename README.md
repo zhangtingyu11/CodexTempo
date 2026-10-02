@@ -26,7 +26,7 @@ cd macOS
 open build/CodexTempo.app
 ```
 
-应用会显示原生浮动面板，并常驻菜单栏。它优先通过本机 `codex app-server` 查询实时额度；请确保已安装 Codex CLI，或已使用 Codex 产生过 `~/.codex/sessions` 本地快照。若 Codex CLI 安装在非标准位置，可在启动前设置 `CODEX_EXECUTABLE=/完整路径/codex`。
+应用会显示原生浮动面板，并常驻菜单栏。它通过本机 `codex app-server` 查询实时额度；请确保本机已有可用的 Codex 后台程序且已登录。若 Codex CLI 安装在非标准位置，可在启动前设置 `CODEX_EXECUTABLE=/完整路径/codex`。
 
 macOS 版还支持菜单栏直接显示每周剩余额度、启动时立即恢复上次快照、记忆窗口位置、窗口置顶、登录时启动，以及跟随系统的浅色/深色外观。
 
@@ -40,7 +40,7 @@ Windows 与 macOS 使用统一的 Apple 灰、系统蓝、额度卡片和蓝色�
 - Windows 触碰屏幕边缘自动缩成紧凑模式
 - Windows 提供托盘入口、桌面快捷方式和关闭选择；macOS 常驻菜单栏并显示周额度
 - 两个平台均支持窗口置顶和登录时启动
-- 官方接口不可用时自动回退本地 session
+- 官方接口不可用时保留已核对账号的缓存并标注时间，不扫描聊天记录
 - 短暂连接波动时保留最后可信值，避免额度来回跳变
 - 小组件不解析对话正文，也不向开发者服务器上传数据
 
@@ -78,9 +78,9 @@ cd macOS
 open build/CodexTempo.app
 ```
 
-The native floating panel also lives in the menu bar. It prefers the local `codex app-server` live API and falls back to `~/.codex/sessions`. Set `CODEX_EXECUTABLE=/full/path/to/codex` before launch if the CLI is installed in a non-standard location.
+The native floating panel also lives in the menu bar. It uses the local `codex app-server` live API and requires an existing Codex login. Set `CODEX_EXECUTABLE=/full/path/to/codex` before launch if the CLI is installed in a non-standard location.
 
-The macOS build also shows weekly allowance directly in the menu bar, restores the last snapshot immediately, remembers window position, supports always-on-top and launch at login, and follows the system light/dark appearance.
+The macOS build also shows weekly allowance directly in the menu bar, restores cached data after checking the account, remembers window position, supports always-on-top and launch at login, and follows the system light/dark appearance.
 
 Windows and macOS share the same Apple gray and system-blue visual language, quota cards, and blue leaf icon. The Windows build follows the system light/dark theme and remembers its last window position.
 
@@ -92,7 +92,7 @@ Windows and macOS share the same Apple gray and system-blue visual language, quo
 - Edge-triggered compact mode on Windows
 - Windows tray access, desktop shortcut, and close choice; native menu-bar status on macOS
 - Always-on-top and optional launch at login on both platforms
-- Automatic local-session fallback when the official interface is unavailable
+- Timestamped, account-checked cache when the official interface is unavailable; no transcript scanning
 - Keeps the last trusted value during brief connection failures to prevent quota jumps
 - The widget does not parse conversation content or upload data to a developer-operated server
 

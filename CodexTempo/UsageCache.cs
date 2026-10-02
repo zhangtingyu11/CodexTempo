@@ -11,21 +11,24 @@ internal static class UsageCache
 
     private static UsageSnapshot? Load(string path, DateTimeOffset now)
     {
-        try { return Active(JsonSerializer.Deserialize<UsageSnapshot>(File.ReadAllText(path)), now); }
+        try { return new FileInfo(path).Length > 65536 ? null : Active(JsonSerializer.Deserialize<UsageSnapshot>(File.ReadAllText(path)), now); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or ArgumentException) { return null; }
     }
 
     public static UsageSnapshot? Active(UsageSnapshot? value, DateTimeOffset now)
     {
-        if (value is null) return null;
-        var five = value.FiveHour?.ResetsAt > now ? value.FiveHour : null;
-        var week = value.Week?.ResetsAt > now ? value.Week : null;
+        if (value is null || value.CapturedAt > now.AddMinutes(5)) return null;
+        var five = Valid(value.FiveHour, now) ? value.FiveHour : null;
+        var week = Valid(value.Week, now) ? value.Week : null;
         if (five is null && week is null) return null;
         return value with {
             FiveHour = five, Week = week, SourceFile = CodexUsageProvider.CachedSourceName,
             TodayUsedPercent = value.CapturedAt.LocalDateTime.Date == now.LocalDateTime.Date ? value.TodayUsedPercent : null
         };
     }
+
+    private static bool Valid(LimitWindow? window, DateTimeOffset now) => window is not null &&
+        window.ResetsAt > now && double.IsFinite(window.UsedPercent) && window.UsedPercent is >= 0 and <= 100;
 
     public static void Save(UsageSnapshot value) => Save(value, CachePath);
 

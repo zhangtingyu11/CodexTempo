@@ -25,6 +25,7 @@ public sealed class CodexAppServerClient : IDisposable
     private bool _disposed;
     private string? _resolvedExecutable;
     private string? _contextStamp;
+    private readonly string _anonymousScope = Guid.NewGuid().ToString("N");
     public string? AccountKey { get; private set; }
 
     public async Task<UsageSnapshot?> ReadLatestAsync(CancellationToken cancellationToken = default)
@@ -281,14 +282,15 @@ public sealed class CodexAppServerClient : IDisposable
         catch (Exception ex) when (ex is JsonException or InvalidOperationException or FormatException or ArgumentOutOfRangeException or OverflowException) { return null; }
     }
 
-    private static string? ParseAccountKey(JsonElement response)
+    private string? ParseAccountKey(JsonElement response)
     {
         if (!response.TryGetProperty("result", out var result) ||
             !result.TryGetProperty("account", out var account) || account.ValueKind != JsonValueKind.Object) return null;
         // Persist a digest only, never email or authentication material.
         var identity = account.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.String ? id.GetString() :
             account.TryGetProperty("email", out var email) && email.ValueKind == JsonValueKind.String ? email.GetString() : null;
-        return string.IsNullOrWhiteSpace(identity) ? null : AccountContext.Hash(account.GetRawText());
+        return AccountContext.Hash(CodexPathResolver.ResolveHome() + "|" + account.GetRawText() +
+            (string.IsNullOrWhiteSpace(identity) ? _anonymousScope : ""));
     }
 
     private static string? ResolveCodexExecutable()

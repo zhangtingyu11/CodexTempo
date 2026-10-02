@@ -30,7 +30,7 @@ enum RecommendationEngine {
             }
         }
 
-        rate = min(max(rate, 0.15), 2.5)
+        rate = min(max(rate, 0), 2.5)
         let midnight = Calendar.current.date(byAdding: .day, value: 1, to: Calendar.current.startOfDay(for: now))!
         let remainingToday = min(week.remainingPercent, neededHourlyBurn * max(0, min(hoursLeft, midnight.timeIntervalSince(now) / 3_600)))
         let perDay = (snapshot.todayUsedPercent ?? 0) + remainingToday

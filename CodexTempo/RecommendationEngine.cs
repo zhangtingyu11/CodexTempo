@@ -24,7 +24,7 @@ public static class RecommendationEngine
             else if (shortRemaining <= 35 && shortHours > 1) rate = Math.Min(rate, .72);
         }
 
-        rate = Math.Clamp(rate, .15, 2.5);
+        rate = Math.Clamp(rate, 0, 2.5);
         var midnight = new DateTimeOffset(now.LocalDateTime.Date.AddDays(1));
         var remainingToday = Math.Min(week.RemainingPercent,
             neededHourlyBurn * Math.Max(0, Math.Min(hoursLeft, (midnight - now).TotalHours)));

@@ -43,7 +43,9 @@ enum UsageLogic {
         return result
     }
     static func active(_ snapshot: UsageSnapshot?, now: Date) -> UsageSnapshot? {
-        guard var result = snapshot else { return nil }
+        guard var result = snapshot, result.capturedAt <= now.addingTimeInterval(300) else { return nil }
+        if let window = result.fiveHour, !window.usedPercent.isFinite || !(0...100).contains(window.usedPercent) { result.fiveHour = nil }
+        if let window = result.week, !window.usedPercent.isFinite || !(0...100).contains(window.usedPercent) { result.week = nil }
         if (result.fiveHour?.resetsAt ?? .distantPast) <= now { result.fiveHour = nil }
         if (result.week?.resetsAt ?? .distantPast) <= now { result.week = nil }
         guard result.week != nil || result.fiveHour != nil else { return nil }

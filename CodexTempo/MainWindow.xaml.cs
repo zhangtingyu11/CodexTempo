@@ -178,7 +178,7 @@ public partial class MainWindow : Window
                 : fresh
                 ? $"额度更新 · {snapshot.CapturedAt.ToLocalTime():HH:mm:ss}"
                 : $"最后额度 · {snapshot.CapturedAt.ToLocalTime():MM-dd HH:mm}";
-            FooterLabel.Text = "正常每 10 秒刷新 · 失败自动退避";
+            FooterLabel.Text = "10 秒刷新";
             WidgetShell.ToolTip = SyncLabel.Text + "\n右键可立即刷新；双击紧凑面板可展开";
     }
 
@@ -254,7 +254,7 @@ public partial class MainWindow : Window
         UpdateLimit(sample.FiveHour, FivePercent, FiveProgress, FiveReset, now);
         UpdateLimit(sample.Week, WeekPercent, WeekProgress, WeekReset, now);
         SyncLabel.Text = $"实时查询 · {DateTime.Now:HH:mm:ss}";
-        FooterLabel.Text = "每 10 秒查询实时额度";
+        FooterLabel.Text = "10 秒刷新";
     }
 
     public void PrepareCompactPreview() => DockToEdge(DockEdge.Right);
